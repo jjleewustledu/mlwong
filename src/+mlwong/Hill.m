@@ -1,0 +1,165 @@
+classdef Hill < handle
+    %% Fits the fraction of intact tracer in plasma.
+    %  See also http://www.turkupetcentre.net/petanalysis/input_parent_fitting_hill.html
+    %  
+    %  Created 07-Jun-2023 16:42:57 by jjlee in repository /Users/jjlee/MATLAB-Drive/mlwong/src/+mlwong.
+    %  Developed on Matlab 9.14.0.2254940 (R2023a) Update 2 for MACI64.  Copyright 2023 John J. Lee.
+    
+    properties
+        dt
+        T
+        Tout
+        visualize_anneal
+    end
+
+    properties (Dependent)
+        results
+ 		timeInterpolants
+    end
+
+    methods %% GET, SET
+        function g = get.results(this)
+            g = this.results_;
+        end
+        function g = get.timeInterpolants(this)
+            if isempty(this.timeInterpolants_)
+                secs = this.T.Time(end) - this.T.Time(1);
+                assert(isnumeric(secs))
+                g = 0:this.dt:secs-1;
+                return
+            end
+            g = this.timeInterpolants_;
+        end
+        function set.timeInterpolants(this, s)
+            this.timeInterpolants_ = s;
+        end
+    end
+
+    methods
+        function this = Hill(T, opts)
+            arguments
+                T table % ["Time", "FractionIntact"]
+                opts.dt double = 1 % sampling interval (sec)
+                opts.visualize_anneal logical = false;
+            end
+            T = T(~isnan(T.FractionIntact), :);
+            this.T = T;
+            this.dt = opts.dt;
+            this.visualize_anneal = opts.visualize_anneal;
+
+            % a, b, c, d, e; http://www.turkupetcentre.net/petanalysis/input_parent_fitting_hill.html
+            seps = 0.0001;
+            this.ks_lower = [0.01, 1, seps, 0.95, 0];
+            this.ks0 = [0.03, 1.5, 2*seps, 0.975, 60]; 
+            this.ks_upper = [0.06447, 4, inf, 1, 300];
+            this.ks_names = {'a' 'b' 'c' 'd' 'e'};
+        end
+        function h = plot(this, varargin)
+            h = figure;
+            hold("on")
+            plot(this.T, "Time", "FractionIntact", LineStyle="none", Marker="o", MarkerSize=9)
+            plot(this.Tout, "Time", "FractionIntact", LineStyle=":", LineWidth=2)
+            hold("off")
+            xlabel("time (s)", FontSize=16)
+            ylabel("fraction of parent tracer", FontSize=16)
+            title("Extended Hill Function", FontSize=20)
+            annotation('textbox', [.45 .35 .8 .5], 'String', sprintfModel(this), 'FitBoxToText', 'on', 'FontSize', 14, 'LineStyle', 'none')            
+        end
+        function Tout1 = solve(this)
+            %% options
+            options_fmincon = optimoptions('fmincon', ...
+                'FunctionTolerance', 1e-12, ...
+                'OptimalityTolerance', 1e-12, ...
+                'TolCon', 1e-14, ...
+                'TolX', 1e-14);
+            if this.visualize_anneal
+                options = optimoptions('simulannealbnd', ...
+                    'AnnealingFcn', 'annealingboltz', ...
+                    'FunctionTolerance', 1e-10, ...
+                    'HybridFcn', {@fmincon, options_fmincon}, ...
+                    'InitialTemperature', 20, ...
+                    'MaxFunEvals', 50000, ...
+                    'ReannealInterval', 200, ...
+                    'TemperatureFcn', 'temperatureexp', ...
+                    'Display', 'diagnose', ...
+                    'PlotFcns', {@saplotbestx,@saplotbestf,@saplotx,@saplotf,@saplotstopping,@saplottemperature});
+            else
+                options = optimoptions('simulannealbnd', ...
+                    'AnnealingFcn', 'annealingboltz', ...
+                    'FunctionTolerance', 1e-10, ...
+                    'HybridFcn', {@fmincon, options_fmincon}, ...
+                    'InitialTemperature', 20, ...
+                    'MaxFunEvals', 50000, ...
+                    'ReannealInterval', 200, ...
+                    'TemperatureFcn', 'temperatureexp');
+            end
+
+            %%
+
+            times_sampled = double(this.T.Time);
+            measurement = double(this.T.FractionIntact);
+ 			[ks_,sse,exitflag,output] = simulannealbnd( ...
+                @(ks__) this.loss_function(ks__, times_sampled, measurement), ...
+                this.ks0, this.ks_lower, this.ks_upper, options);
+            this.results_ = struct('ks0', this.ks0, 'ks', ks_, 'sse', sse, 'exitflag', exitflag, 'output', output);            
+
+            Time = ascol(this.timeInterpolants);
+            FractionIntact = ascol(mlwong.Hill.solution(ks_, Time));
+            this.Tout = table(Time, FractionIntact);
+            Tout1 = this.Tout;
+        end
+        function s = sprintfModel(this)
+            s = sprintf('extended Hill function:\n');
+            ks = this.results.ks;
+            kl = this.ks_lower;
+            ku = this.ks_upper;
+            for ky = 1:length(ks)
+                s = [s sprintf('\t%s = %g in [%g, %g]\n', this.ks_names{ky}, ks(ky), kl(ky), ku(ky))]; %#ok<AGROW>
+            end
+
+            times_sampled = double(this.T.Time);
+            measurement = double(this.T.FractionIntact);
+            s = [s sprintf('\tloss = %g\n', this.loss_function(ks, times_sampled, measurement))];
+            s = [s sprintf('\tsse = %g\n', this.results.sse)];
+        end
+    end
+
+    methods (Static)
+        function loss = loss_function(ks, times_sampled, measurement)
+            estimation = mlwong.Hill.solution(ks, times_sampled); % \in [0 1] 
+            measurement1 = measurement/max(measurement); % \in [0 1] 
+            positive = measurement1 > 0;
+            eoverm = estimation(positive)./measurement1(positive);            
+            loss = mean(abs(1 - eoverm));
+        end
+        function fp = solution(ks, t)
+            a = ks(1);
+            b = ks(2);
+            c = ks(3);
+            d = ks(4);
+            e = ks(5);
+            
+            fp = nan(size(t));
+            fp(t <= e) = d;
+            rational = ((d - a)*(t - e).^b)./(c + (t - e).^b);
+            fp(t > e) = d - rational(t > e);
+        end
+    end
+
+    %% PRIVATE
+
+    properties (Access = private)
+        ks0
+        ks_lower
+        ks_names
+        ks_upper
+        results_
+        timeInterpolants_
+    end
+
+    methods (Access = private)
+    end
+
+    
+    %  Created with mlsystem.Newcl, inspired by Frank Gonzalez-Morphy's newfcn.
+end
