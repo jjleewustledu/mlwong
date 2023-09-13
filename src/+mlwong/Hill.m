@@ -23,7 +23,7 @@ classdef Hill < handle
         end
         function g = get.timeInterpolants(this)
             if isempty(this.timeInterpolants_)
-                secs = this.T.Time(end) - this.T.Time(1);
+                secs = this.T.Time(end);
                 assert(isnumeric(secs))
                 g = 0:this.dt:secs-1;
                 return
@@ -40,30 +40,42 @@ classdef Hill < handle
             arguments
                 T table % ["Time", "FractionIntact"]
                 opts.dt double = 1 % sampling interval (sec)
+                opts.d_min double = 0.9
                 opts.visualize_anneal logical = false;
             end
             T = T(~isnan(T.FractionIntact), :);
+            if max(T.FractionIntact) > 1
+                % ensure fraction
+                T.FractionIntact = T.FractionIntact/100;
+            end
             this.T = T;
             this.dt = opts.dt;
             this.visualize_anneal = opts.visualize_anneal;
 
             % a, b, c, d, e; http://www.turkupetcentre.net/petanalysis/input_parent_fitting_hill.html
-            seps = 0.0001;
-            this.ks_lower = [0.01, 1, seps, 0.95, 0];
+            e_max = T.Time(end)/4;
+            seps = 0.00001;
+            this.ks_lower = [seps, 1, seps, opts.d_min, 0];
             this.ks0 = [0.03, 1.5, 2*seps, 0.975, 60]; 
-            this.ks_upper = [0.06447, 4, inf, 1, 300];
+            this.ks_upper = [0.06447, 4, inf, 1, e_max];
             this.ks_names = {'a' 'b' 'c' 'd' 'e'};
         end
         function h = plot(this, varargin)
+            T_pcnt_ = this.T;
+            T_pcnt_.FractionIntact = 100*T_pcnt_.FractionIntact;
+            Tout_pcnt_ = this.Tout;
+            Tout_pcnt_.FractionIntact = 100*Tout_pcnt_.FractionIntact;
+
             h = figure;
             hold("on")
-            plot(this.T, "Time", "FractionIntact", LineStyle="none", Marker="o", MarkerSize=9)
-            plot(this.Tout, "Time", "FractionIntact", LineStyle=":", LineWidth=2)
+            plot(T_pcnt_, "Time", "FractionIntact", LineStyle="none", Marker="o", MarkerSize=9)
+            plot(Tout_pcnt_, "Time", "FractionIntact", LineStyle="--", Color="#D95319", LineWidth=2)
             hold("off")
-            xlabel("time (s)", FontSize=16)
-            ylabel("fraction of parent tracer", FontSize=16)
-            title("Extended Hill Function", FontSize=20)
+            xlabel("time (s)", FontSize=14, FontWeight="bold")
+            ylabel("fraction of parent tracer (%)", FontSize=14, FontWeight="bold")
+            title("Extended Hill Function", FontSize=18, FontWeight="bold")
             annotation('textbox', [.45 .35 .8 .5], 'String', sprintfModel(this), 'FitBoxToText', 'on', 'FontSize', 14, 'LineStyle', 'none')            
+            legend(["HPLC measurements", "Hill function fit"])
         end
         function Tout1 = solve(this)
             %% options
