@@ -13,13 +13,17 @@ classdef Hill < handle
     end
 
     properties (Dependent)
+        product
         results
  		timeInterpolants
     end
 
     methods %% GET, SET
+        function g = get.product(this)
+            g = this.product_;
+        end
         function g = get.results(this)
-            g = this.results_;
+            g = this.product_;
         end
         function g = get.timeInterpolants(this)
             if isempty(this.timeInterpolants_)
@@ -165,7 +169,7 @@ classdef Hill < handle
         ks_lower
         ks_names
         ks_upper
-        results_
+        product_
         timeInterpolants_
     end
 
