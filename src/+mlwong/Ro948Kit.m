@@ -368,7 +368,7 @@ classdef Ro948Kit < handle & mlsystem.IHandle
                 h = plot(hill);
                 disp(hill)
                 disp(hill.results.ks)
-                disp(hill.results.sse)
+                disp(hill.results.loss)
             else
                 timeInterp = 0:1:T.Time(end)-1;
                 FractionIntact = makima(T.Time, T.FractionIntact, timeInterp);
