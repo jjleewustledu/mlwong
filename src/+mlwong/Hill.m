@@ -110,10 +110,10 @@ classdef Hill < handle
 
             times_sampled = double(this.T.Time);
             measurement = double(this.T.FractionIntact);
- 			[ks_,sse,exitflag,output] = simulannealbnd( ...
+ 			[ks_,loss,exitflag,output] = simulannealbnd( ...
                 @(ks__) this.loss_function(ks__, times_sampled, measurement), ...
                 this.ks0, this.ks_lower, this.ks_upper, options);
-            this.results_ = struct('ks0', this.ks0, 'ks', ks_, 'sse', sse, 'exitflag', exitflag, 'output', output);            
+            this.product_ = struct('ks0', this.ks0, 'ks', ks_, 'loss', loss, 'exitflag', exitflag, 'output', output);            
 
             Time = ascol(this.timeInterpolants);
             FractionIntact = ascol(mlwong.Hill.solution(ks_, Time));
@@ -132,7 +132,7 @@ classdef Hill < handle
             times_sampled = double(this.T.Time);
             measurement = double(this.T.FractionIntact);
             s = [s sprintf('\tloss = %g\n', this.loss_function(ks, times_sampled, measurement))];
-            s = [s sprintf('\tsse = %g\n', this.results.sse)];
+            s = [s sprintf('\tloss = %g\n', this.results.loss)];
         end
     end
 
