@@ -11,6 +11,7 @@ classdef Ro948Kit < handle & mlsystem.IHandle
         hct
         Hill_d_min
         ptac_units
+        rescaling_twilite
         sesdir
         toi
         t0_forced
@@ -157,6 +158,11 @@ classdef Ro948Kit < handle & mlsystem.IHandle
             %doi = datetime(this.toi.Year, this.toi.Month, this.toi.Day, 0,0,0);
             Time = seconds(draw - this.toi);
             this.T_minimal_ = addvars(T, Time, Before=1, NewVariableNames="Time");
+
+            % decay-correct table minimal from syringe measurements
+            this.T_minimal_.wbKBq_mL = this.T_minimal_.wbKBq_mL .* 2.^(Time/this.half_life);
+            this.T_minimal_.plasmaKBq_mL = this.T_minimal_.plasmaKBq_mL .* 2.^(Time/this.half_life);
+
             g = this.T_minimal_;
         end
         function g = get.T_parent_frac(this)
@@ -246,6 +252,7 @@ classdef Ro948Kit < handle & mlsystem.IHandle
             fprintf("%s.rescaling->%g\n", stackstr(), rescaling)
             this.T_twil_ = T;
             g = this.T_twil_;
+            this.rescaling_twilite = rescaling;
         end
     end
 
@@ -285,7 +292,7 @@ classdef Ro948Kit < handle & mlsystem.IHandle
             toi_ = this.toi;
             select = toi_ <= this.crv.time & this.crv.time <= toi_ + seconds(300); % 5 min + 1
             Time = seconds(this.crv.time(select) - toi_);
-            wbKBq_mL = ascol(M(select))/1e3; % Bq -> kBq
+            wbKBq_mL = ascol(M(select))/1e3; % cps -> kcps
             T = table(Time, wbKBq_mL);            
             [~,fp] = myfileparts(this.crv.filename);
             writetable(T, fullfile(this.twildir, fp+"_deconv.csv"));
