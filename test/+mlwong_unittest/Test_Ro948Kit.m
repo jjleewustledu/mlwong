@@ -19,8 +19,8 @@ classdef Test_Ro948Kit < matlab.unittest.TestCase
                 fileprefix=stackstr(), ...
                 toi="29-Jun-2023 13:10:23", ...
                 crv_filename="twilite/R21_016_PET2_06292023_D1.crv", ...
-                hct=41.5, ...
-                t0_forced=47)
+                hct="41.5", ...
+                time_cliff="200")          
             popd(pwd0)
         end
 
@@ -65,7 +65,7 @@ classdef Test_Ro948Kit < matlab.unittest.TestCase
         function test_build_deconv(this)
             obj = this.testObj;
             h = obj.build_deconv(41.5, 47);
-            %saveFigure2(h, fullfile(obj.twildir, obj.fileprefix+"_deconvBayes.fig"))
+            saveFigure2(h, fullfile(obj.twildir, obj.fileprefix+"_deconvBayes.fig"))
         end
         function test_build_pow(this)
             %% plasma over whole-blood
@@ -83,38 +83,41 @@ classdef Test_Ro948Kit < matlab.unittest.TestCase
             obj = this.testObj;
             h = obj.build_ptacs();
             saveFigure2(h, fullfile(obj.chemdir, obj.fileprefix+"_ptacs.fig"))
+
+            fprintf("%s:  rescaling_twilite->%g\n", stackstr(), obj.rescaling_twilite)
         end
         function test_call(this)
             obj = this.testObj;
             obj.call();
 
             T = readtable(fullfile( ...
-                obj.chemdir, "R21_016_06132023_parent_frac.csv"));
+                obj.chemdir, "sub-R21_016_20230629_parent_frac.csv"));
             T %#ok<NOPRT> % disp head & tail
             figure
             plot(T, "Min", "PF")
             xlabel("Time (Min)")
             ylabel("Parent Fraction (%)")
-            title("R21_016_06132023_parent_frac.csv")
-
+            title("sub-R21_016_20230629_parent_frac.csv")
 
             T = readtable(fullfile( ...
-                obj.chemdir, "R21_016_06132023_total_ptac.csv"));
+                obj.chemdir, "sub-R21_016_20230629_total_ptac.csv"));
             T %#ok<NOPRT> % disp head & tail
             figure
             plot(T, "Min", "pTAC")
             xlabel("Time (Min)")
             ylabel("Activity \mu Ci/mL")
-            title("R21_016_06132023_total_ptac.csv")
+            title("sub-R21_016_20230629_total_ptac.csv")
 
             T = readtable(fullfile( ...
-                obj.chemdir, "R21_016_06132023_metab_corr_ptac.csv"));
+                obj.chemdir, "sub-R21_016_20230629_metab_corr_ptac.csv"));
             T %#ok<NOPRT> % disp head & tail
             figure
             plot(T, "Min", "mc_pTAC")
             xlabel("Time (Min)")
             ylabel("Activity \mu Ci/mL")
-            title("R21_016_06132023_metab_corr_ptac.csv")
+            title("sub-R21_016_20230629_metab_corr_ptac.csv")
+
+            fprintf("%s:  rescaling_twilite->%g\n", stackstr(), obj.rescaling_twilite)
         end
         function test_plot(this)
             obj = this.testObj;

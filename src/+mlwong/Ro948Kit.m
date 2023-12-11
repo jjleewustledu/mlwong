@@ -6,15 +6,19 @@ classdef Ro948Kit < handle & mlsystem.IHandle
     %  Developed on Matlab 9.14.0.2254940 (R2023a) Update 2 for MACI64.  Copyright 2023 John J. Lee.
     
     properties
+        Delta
         do_Hill
         half_life
         hct
         Hill_d_min
+        N_average_minimal
         ptac_units
         rescaling_twilite
         sesdir
-        toi
         t0_forced
+        timeCliff
+        toi
+        tracer
 
         color_ocean = ""
         color_scarlet = ""
@@ -35,7 +39,6 @@ classdef Ro948Kit < handle & mlsystem.IHandle
         sesid
         sub
         subid
-        tracer
         twildir
 
         T_frac_intact
@@ -88,9 +91,6 @@ classdef Ro948Kit < handle & mlsystem.IHandle
             re = regexp(this.ses, "sub-(?<subid>\S+)", "names");
             assert(~isempty(re))
             g = re.subid;
-        end
-        function g = get.tracer(this)
-            g = '18F';
         end
         function g = get.twildir(this)
             g = fullfile(this.sesdir, "twilite");
@@ -160,8 +160,8 @@ classdef Ro948Kit < handle & mlsystem.IHandle
             this.T_minimal_ = addvars(T, Time, Before=1, NewVariableNames="Time");
 
             % decay-correct table minimal from syringe measurements
-            this.T_minimal_.wbKBq_mL = this.T_minimal_.wbKBq_mL .* 2.^(Time/this.half_life);
-            this.T_minimal_.plasmaKBq_mL = this.T_minimal_.plasmaKBq_mL .* 2.^(Time/this.half_life);
+            %this.T_minimal_.wbKBq_mL = this.T_minimal_.wbKBq_mL .* 2.^(Time/this.half_life);
+            %this.T_minimal_.plasmaKBq_mL = this.T_minimal_.plasmaKBq_mL .* 2.^(Time/this.half_life);
 
             g = this.T_minimal_;
         end
@@ -246,7 +246,11 @@ classdef Ro948Kit < handle & mlsystem.IHandle
             T = readtable(deconv_csv); 
 
             % rescale twilite
-            rescaling = this.T_minimal.wbKBq_mL(1)/T.wbKBq_mL(end);
+            first_T_minimal = this.T_minimal.wbKBq_mL(1:this.N_average_minimal);
+            first_T_minimal = mean(first_T_minimal);
+            last_T_wbKBq_mL = T.wbKBq_mL(T.wbKBq_mL > 0);
+            last_T_wbKBq_mL = last_T_wbKBq_mL(end);
+            rescaling = first_T_minimal/last_T_wbKBq_mL;
             assert(isfinite(rescaling), stackstr())
             T.wbKBq_mL = T.wbKBq_mL * rescaling;
             fprintf("%s.rescaling->%g\n", stackstr(), rescaling)
@@ -257,42 +261,48 @@ classdef Ro948Kit < handle & mlsystem.IHandle
     end
 
     methods
-        function [h,T] = build_deconv(this, hct, t0_forced)
+
+        function [h,T] = build_deconv(this, hct, t0_forced, opts)
             arguments
                 this mlwong.Ro948Kit
                 hct {mustBeScalarOrEmpty} = this.hct
                 t0_forced {mustBeScalarOrEmpty} = this.t0_forced
+                opts.timeCliff double = this.timeCliff
             end
 
             pwd0 = pushd(this.twildir);
             
             idx0 = this.index_toi_minus_30sec(); % TOI - 30 s
             idxF = this.index_toi_plus_5min(); % nominal TOI + 5 min blood draw 
+            toi_ = this.toi;
+            select = toi_ <= this.crv.time & this.crv.time <= toi_ + seconds(300); % 5 min + 1, col
 
             % deconvBayes
-            M_ = this.crv.timetable().Coincidence(idx0:idxF)*this.inveff;
+            M_ = this.crv.timetable().Coincidence(idx0:idxF)*this.inveff; % col
             cath = mlswisstrace.Catheter_DT20190930( ...
                 Measurement=M_, hct=hct, tracer=this.tracer); 
-            M = zeros(size(this.crv.timetable().Coincidence));
+            M = zeros(size(this.crv.timetable().Coincidence)); % col
             % t0 reflects rigid extension + Luer valve + cath in Twilite cradle
             xlim = [0 300+t0_forced];
-            M(idx0:idxF) = cath.deconvBayes( ...
-                t0_forced=t0_forced, xlim=xlim);
+            M(idx0:idxF) = ascol( ...
+                cath.deconvBayes( ...
+                t0_forced=t0_forced, xlim=xlim));
             fqfp = fullfile(this.twildir, this.fileprefix+"_deconvBayes");
-            if ~isfile(fqfp+".fig")
+            %if ~isfile(fqfp+".fig")
                 saveFigure2(gcf, fqfp);
-            end
+            %%end
 
             % decay-correct Measurement
-            times = idx0:idxF;
-            times = times - 1;
-            M = M.*2.^(times/this.half_life);
+            %times = idx0:idxF;
+            %times = times - 1;
+            %M = M.*2.^(times/this.half_life);
+
+            % disperse Measurement
+            M_select = this.disperse(M(select));
 
             % write csv
-            toi_ = this.toi;
-            select = toi_ <= this.crv.time & this.crv.time <= toi_ + seconds(300); % 5 min + 1
             Time = seconds(this.crv.time(select) - toi_);
-            wbKBq_mL = ascol(M(select))/1e3; % cps -> kcps
+            wbKBq_mL = ascol(M_select)/1e3; % cps -> kcps
             T = table(Time, wbKBq_mL);            
             [~,fp] = myfileparts(this.crv.filename);
             writetable(T, fullfile(this.twildir, fp+"_deconv.csv"));
@@ -304,12 +314,27 @@ classdef Ro948Kit < handle & mlsystem.IHandle
             ylabel("wb activity (kBq/mL)", FontSize=14, FontWeight='bold')
             title(sprintf("From %s", this.crv.filename), FontSize=16, Interpreter="none")   
             fqfp = fullfile(this.twildir, fp+"_deconv");
-            if ~isfile(fqfp+".fig")
+            %if ~isfile(fqfp+".fig")
                 saveFigure2(h, fqfp)
-            end
+            %end
 
             popd(pwd0);
         end
+
+
+        function [h,T] = build_deconv1(this, hct, t0_forced, opts)
+            arguments
+                this mlwong.Ro948Kit
+                hct {mustBeScalarOrEmpty} = this.hct
+                t0_forced {mustBeScalarOrEmpty} = this.t0_forced
+                opts.timeCliff double = this.timeCliff
+            end
+
+            pwd0 = pushd(this.twildir);
+
+            popd(pwd0);
+        end
+
         function [h,V] = build_pow(this, opts)
             arguments
                 this mlwong.Ro948Kit
@@ -457,14 +482,33 @@ classdef Ro948Kit < handle & mlsystem.IHandle
             writetable(this.T_parent_frac, ...
                 fullfile(this.chemdir, this.fileprefix + "_parent_frac.csv"));
         end
+        function M1 = disperse(this, M)
+            %% disperse Measurement, which has been trimmed to interval of measurement
+
+            if ~isrow(M)
+                M = asrow(M);
+                times = 0:length(M)-1;
+                AUC = trapz(exp(-times*this.Delta));
+                M__ = conv(M, exp(-times*this.Delta))/AUC;
+                M1 = M__(1:length(M));
+                M1 = ascol(M1);
+                return
+            end
+    
+            % M is row
+            times = 0:length(M)-1;
+            AUC = trapz(exp(-times*this.Delta));
+            M__ = conv(M, exp(-times*this.Delta))/AUC;
+            M1 = M__(1:length(M));
+        end
         function [h,h1,h2,h3] = plot(this)
 
             h = this.plot_crvs();
             [~,fp] = myfileparts(this.crv_.filename);
             fqfp = fullfile(this.twildir, fp);
-            if ~isfile(fqfp+".fig")
+            %if ~isfile(fqfp+".fig")
                 saveFigure2(h, fqfp)
-            end
+            %end
 
             T = readtable(fullfile( ...
                 this.chemdir, this.fileprefix + "_parent_frac.csv"));
@@ -537,6 +581,10 @@ classdef Ro948Kit < handle & mlsystem.IHandle
                 opts.do_Hill = true
                 opts.ptac_units = "uCi/mL" % "uCi/mL", "kBq/mL"
                 opts.half_life = 109.77
+                opts.tracer = "RO948"
+                opts.timeCliff double = 300
+                opts.N_average_minimal double = 1
+                opts.Delta double = 1/60
             end
             this.toi = opts.toi;
             this.sesdir = opts.sesdir;
@@ -549,6 +597,10 @@ classdef Ro948Kit < handle & mlsystem.IHandle
             this.do_Hill = opts.do_Hill;
             this.ptac_units = opts.ptac_units;
             this.half_life = opts.half_life;
+            this.tracer = opts.tracer;
+            this.timeCliff = opts.timeCliff;
+            this.N_average_minimal = opts.N_average_minimal;
+            this.Delta = opts.Delta;
         end
         function initialize(this)
             this.T_frac_intact = readtable(fullfile(this.chemdir, this.fileprefix + "_frac_intact.csv"));
@@ -573,7 +625,7 @@ classdef Ro948Kit < handle & mlsystem.IHandle
             idx = round(seconds(dur) + 1);
         end
         function idx = index_toi_plus_5min(this)
-            dur = duration(this.toi - this.datetime_crv_init(this.crv)) + minutes(5);
+            dur = duration(this.toi - this.datetime_crv_init(this.crv)) + seconds(this.timeCliff);
             idx = round(seconds(dur) + 1);
         end
     end
