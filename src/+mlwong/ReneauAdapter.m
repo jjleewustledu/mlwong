@@ -60,6 +60,7 @@ classdef ReneauAdapter < handle & mlsystem.IHandle
             this.T_frac_intact = sortrows(this.T_frac_intact, 1);
         end
         function writetables(this)
+            ensuredir(fullfile(this.sesdir, 'chemistry'));
             writetable(this.T_minimal, fullfile(this.sesdir, 'chemistry', this.fileprefix+"_minimal.csv"));
             writetable(this.T_frac_intact, fullfile(this.sesdir, 'chemistry', this.fileprefix+"_frac_intact.csv"));
         end

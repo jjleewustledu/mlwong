@@ -94,6 +94,7 @@ classdef Ro948Kit < handle & mlsystem.IHandle
         end
         function g = get.twildir(this)
             g = fullfile(this.sesdir, "twilite");
+            ensuredir(g);
         end
 
         function g = get.T_frac_intact(~)
@@ -273,9 +274,9 @@ classdef Ro948Kit < handle & mlsystem.IHandle
             pwd0 = pushd(this.twildir);
             
             idx0 = this.index_toi_minus_30sec(); % TOI - 30 s
-            idxF = this.index_toi_plus_5min(); % nominal TOI + 5 min blood draw 
+            idxF = this.index_toi_plus_time_cliff_min(); % nominal TOI + 5 min blood draw 
             toi_ = this.toi;
-            select = toi_ <= this.crv.time & this.crv.time <= toi_ + seconds(300); % 5 min + 1, col
+            select = toi_ <= this.crv.time & this.crv.time <= toi_ + seconds(this.timeCliff); % 5 min + 1, col
 
             % deconvBayes
             M_ = this.crv.timetable().Coincidence(idx0:idxF)*this.inveff; % col
@@ -283,19 +284,14 @@ classdef Ro948Kit < handle & mlsystem.IHandle
                 Measurement=M_, hct=hct, tracer=this.tracer); 
             M = zeros(size(this.crv.timetable().Coincidence)); % col
             % t0 reflects rigid extension + Luer valve + cath in Twilite cradle
-            xlim = [0 300+t0_forced];
+            xlim = [0 this.timeCliff+t0_forced];
             M(idx0:idxF) = ascol( ...
                 cath.deconvBayes( ...
                 t0_forced=t0_forced, xlim=xlim));
             fqfp = fullfile(this.twildir, this.fileprefix+"_deconvBayes");
             %if ~isfile(fqfp+".fig")
                 saveFigure2(gcf, fqfp);
-            %%end
-
-            % decay-correct Measurement
-            %times = idx0:idxF;
-            %times = times - 1;
-            %M = M.*2.^(times/this.half_life);
+            %end
 
             % disperse Measurement
             M_select = this.disperse(M(select));
@@ -311,7 +307,7 @@ classdef Ro948Kit < handle & mlsystem.IHandle
             h = figure;
             plot(T, "Time", "wbKBq_mL", LineStyle="none", Marker="+", MarkerSize=6)
             xlabel("time (s)", FontSize=14, FontWeight='bold')
-            ylabel("wb activity (kBq/mL)", FontSize=14, FontWeight='bold')
+            ylabel("wb activity (kcps)", FontSize=14, FontWeight='bold')
             title(sprintf("From %s", this.crv.filename), FontSize=16, Interpreter="none")   
             fqfp = fullfile(this.twildir, fp+"_deconv");
             %if ~isfile(fqfp+".fig")
@@ -624,7 +620,7 @@ classdef Ro948Kit < handle & mlsystem.IHandle
             dur = duration(this.toi - this.datetime_crv_init(this.crv)) - seconds(30);
             idx = round(seconds(dur) + 1);
         end
-        function idx = index_toi_plus_5min(this)
+        function idx = index_toi_plus_time_cliff_min(this)
             dur = duration(this.toi - this.datetime_crv_init(this.crv)) + seconds(this.timeCliff);
             idx = round(seconds(dur) + 1);
         end
