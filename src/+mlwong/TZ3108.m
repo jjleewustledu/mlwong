@@ -15,6 +15,25 @@ classdef TZ3108 < handle & mlsystem.IHandle
         tacs
     end
 
+    properties (Constant)
+        home = "/Users/jjlee/Documents/PapersMine/PapersInProgress/Will_Tu/minus-TZ3108";
+        bids_home = "/Users/jjlee/Singularity/TZ3108/derivatives"
+    end
+
+    properties (Dependent)
+        proc_verified_kmdata_xls
+        proc_aif_kmdata_xls
+    end
+
+    methods  %% GET
+        function g = get.proc_verified_kmdata_xls(this)
+            g = mglob(fullfile(this.home, "sub-*/ses-*/chemistry/sub-*_ses-*_proc-verified-pkin.kmData.xls"));
+        end
+        function g = get.proc_aif_kmdata_xls(this)
+            g = mglob(fullfile(this.home, "sub-*/ses-*/chemistry/sub-*_ses-*_proc-aif-*-pkin.kmData.xls"));
+        end
+    end
+
     methods
         function this = build_multinest(this)
             pwd0 = pushd(this.kmdata_.filepath);
@@ -242,6 +261,10 @@ classdef TZ3108 < handle & mlsystem.IHandle
             hold("off");
             set(h, position=[100,100,1000,700]) % position and size of window on display
         end
+
+
+
+
     end
 
     methods (Static)
@@ -254,6 +277,384 @@ classdef TZ3108 < handle & mlsystem.IHandle
             this = mlwong.TZ3108();
             this.N_ensemble = opts.N_ensemble;
             this.kmdata_ = mlpmod.KMData.create(kmd_fqfn);
+            this.pmod_ = mlpmod.Pmod(filename=kmd_fqfn);
+        end
+
+        function create_all_niftis()
+            this = mlwong.TZ3108();
+            pwd0 = pushd(this.home);
+            
+            globbed = [mglob(this.proc_verified_kmdata_xls), mglob(this.proc_aif_kmdata_xls)];
+            for idx = 1:length(globbed)
+                p = mlpmod.Pmod(filename=globbed(idx));
+                [aif_,tacs_] = p.build_nifti();
+                aif_.save();
+                tacs_.save();
+            end
+
+            popd(pwd0);
+        end
+
+        function [t,h] = create_population_aif()
+            %% Normalizes measured AIFs with time average of PET, \int^T dt whole_brain(t)/T,
+            %  then interpolates to 1 sec, then obtains mean across measurements.
+            %  Saves table to mlwong.TZ3108.home as stackstr() + ".mat".
+            %  
+            globbed = mglob( ...
+                fullfile(mlwong.TZ3108.home, "sub-*/ses-*/chemistry/sub-*_ses-*_proc-verified-pkin.kmData.xls"));
+            Ng = length(globbed);
+            assert(Ng > 0)
+            ps = cell(1, Ng);
+            aifs = cell(1, Ng);
+            suv = [];
+            for idx = 1:Ng
+                ps{idx} = mlpmod.Pmod(filename=globbed(idx)); 
+                aifs{idx} = ps{idx}.aif_as_suv(interp_method="pchip", T=150); 
+                suv = [suv, aifs{idx}.suv]; %#ok<AGROW>
+            end
+            suv = mean(suv, 2);
+            time_min = aifs{1}.time_min;
+            t = table(time_min, suv);
+            save(fullfile(mlwong.TZ3108.home, stackstr(use_underscores=true) + ".mat"), "t");
+
+            h = figure; 
+            hold("on");
+            for idx = 1:Ng
+                plot(ps{idx}.aif_as_suv, "time_min", "suv", LineStyle="-", Marker="o", MarkerSize=8); 
+            end
+            plot(t, "time_min", "suv", LineStyle="-", LineWidth=2, Color="k");
+            legend([ ...
+                "n.h. primate 1, (-), Yun122", ...
+                "n.h. primate 2, (-), N_2O ", ...
+                "n.h. primate 2, (-)", ...
+                "n.h. primate 3, (+)", ...
+                "n.h. primate 4, (-)", ...
+                "cohort"], Interpreter="none");
+            xlim([-10, 160]);
+            xlabel("time (min)");
+            ylabel("AIF SUV (g/cm^3");
+            title("Cohort-based AIF from metabolite-corrected plasma AIFs");
+            hold("off");
+            fontsize(scale=1.25);
+        end
+
+        function [htiled,h] = plot_age_dependence(fns, opts)
+            arguments
+                fns {mustBeText}
+                opts.lwidth double = 2
+                opts.fscale double = 1.5
+            end
+
+            p_bases = cell(1, length(fns));
+            t_bases = cell(1, length(fns));
+            suv_bases = cell(1, length(fns));
+            for fidx = 1:length(fns)
+                p_bases{fidx} = mlpmod.Pmod(filename=fns{fidx});
+                t_bases{fidx} = p_bases{fidx}.tacs;
+                suv_base_ = table2array(t_bases{fidx}(:, 4:end));
+                suv_bases{fidx} = suv_base_ * p_bases{fidx}.weight / p_bases{fidx}.dose / 37;
+            end
+
+            % remove blocking
+            is_blocking = contains(fns, "ses-20140724") | contains(fns, "ses-20160309");
+            p_bases = p_bases(~is_blocking);
+            t_bases = t_bases(~is_blocking);
+            suv_bases = suv_bases(~is_blocking);            
+
+            % sort by age
+            ages = cellfun(@(x) x.age_acquisition, p_bases);  % numeric
+            [sorted_ages, sorting_idx] = sort(ages);
+            sorted_legend = sorted_ages + " y";
+            p_bases = p_bases(sorting_idx);
+            t_bases = t_bases(sorting_idx);
+            suv_bases = suv_bases(sorting_idx);
+
+            % cmap = cbrewer2('qual', 'Set2', 3, 'pchip');
+            cmap = viridis(length(ages));
+            % region_names = string(t_base.Properties.VariableNames(4:end));
+            % region_names = strrep(region_names, "tac_", "");
+            % region_names = strrep(region_names, "_kBq_cc_", "");
+            region_names = [ ...                
+                "whole brain", ...
+                "prefrontal", ...
+                "base frontal", ...
+                "anterior cingulate", ...
+                "caudate", ...
+                "putamen", ...
+                "insula", ...
+                "lateral temporal", ...
+                "medial temporal", ...
+                "amygdala", ...
+                "hippocampus", ...
+                "thalamus", ...
+                "hypothalamus", ...
+                "parietal", ...
+                "posterior cingulate", ...
+                "occipital", ...
+                "pons", ...
+                "midbrain", ...
+                "corpus callosum", ...
+                "cortical white matter", ...
+                "cerebellum"];
+
+            suv_timesMid = t_bases{1}{:, 2} / 60;  % min
+            times = 0:1:suv_timesMid(end);  % + suv_taus(end)/2);
+            the_max = max( ...
+                cellfun(@(x) max(x, [], "all"), suv_bases), [], "all");
+
+
+            %% whole brain
+
+            h = figure;   
+            r = 1;
+
+            legend_ = sorted_legend;
+            for fidx = 1:length(fns)
+                try
+                    suv_base = suv_bases{fidx};
+                    if any(isnan(suv_base(:, r)), "all")
+                        legend_(fidx) = [];
+                        continue
+                    end
+                    suv_timesMid = t_bases{fidx}{:, 2} / 60;  % min
+                    interp_base = interp1(suv_timesMid, suv_base(:, r), times, "spline");
+                    interp_base(interp_base < 0 ) = 0;
+
+                    hold("on")
+                    plot(times, interp_base, LineStyle="-", LineWidth=opts.lwidth, Color=cmap(fidx, :));
+                    hold("off")
+                catch ME
+                    handwarning(ME)
+                end
+            end
+            legend(legend_);
+            xlabel("Time (min)");
+            ylabel("SUV (g/cm^3)");
+            ylim([0, the_max]);
+            title(region_names(r));
+
+            fontsize(scale=opts.fscale);
+            saveFigure2(h, "whole_brain_age")
+
+
+            %% cerebellum
+
+            h = figure;   
+            r = 21;
+
+            legend_ = sorted_legend;
+            for fidx = 1:length(fns)
+                try
+                    suv_base = suv_bases{fidx};
+                    if any(isnan(suv_base(:, r)), "all")
+                        legend_(fidx) = [];
+                        continue
+                    end
+                    suv_timesMid = t_bases{fidx}{:, 2} / 60;  % min
+                    interp_base = interp1(suv_timesMid, suv_base(:, r), times, "spline");
+                    interp_base(interp_base < 0 ) = 0;
+
+                    hold("on")
+                    plot(times, interp_base, LineStyle="-", LineWidth=opts.lwidth, Color=cmap(fidx, :));
+                    hold("off")
+                catch ME
+                    handwarning(ME)
+                end
+            end
+            legend(legend_);
+            xlabel("Time (min)");
+            ylabel("SUV (g/cm^3)");
+            ylim([0, the_max]);
+            title(region_names(r));
+
+            fontsize(scale=opts.fscale);
+            saveFigure2(h, "cerebellum_age")
+
+
+            %% regions
+
+            htiled = figure;            
+            tiledlayout(4, 5)
+            for r = 2:21
+                nexttile
+
+                legend_ = sorted_legend;
+                for fidx = 1:length(fns)
+                    try
+                        suv_base = suv_bases{fidx};
+                        if any(isnan(suv_base(:, r)), "all")
+                            legend_(fidx) = [];
+                            continue
+                        end
+                        suv_timesMid = t_bases{fidx}{:, 2} / 60;  % min
+                        interp_base = interp1(suv_timesMid, suv_base(:, r), times, "spline");
+                        interp_base(interp_base < 0 ) = 0;
+
+                        hold("on")
+                        plot(times, interp_base, LineStyle="-", LineWidth=opts.lwidth, Color=cmap(fidx, :));
+                        hold("off")
+                    catch ME
+                        handwarning(ME)
+                    end
+                end
+                % legend(sorted_legend);
+                if r == 2 || r == 7 || r == 12 || r == 17 
+                    ylabel("SUV (g/cm^3)");
+                else
+                    set(gca, yticklabels=[])
+                end
+                if r == 17 || r == 18 || r == 19 || r == 20 || r == 21
+                    xlabel("Time (min)");
+                else
+                    set(gca, xticklabels=[])
+                end
+                ylim([0, the_max]);
+                title(region_names(r));
+            end
+            fontsize(scale=opts.fscale);
+            saveFigure2(htiled, "regions_age")
+        end
+
+        function [htiled,h] = plot_blocking(fn_base, fn_block, fn_block2, opts)
+            arguments
+                fn_base {mustBeFile}
+                fn_block {mustBeFile}
+                fn_block2 {mustBeFile}
+                opts.region_key {mustBeTextScalar} = "cerebellum"
+                opts.legend {mustBeText} = ["", "baseline", "", "blocked by YUN122", "", "blocked by SA4503"]
+                opts.lwidth double = 4
+                opts.mark {mustBeTextScalar} = "+"
+                opts.msize double = 12
+                opts.fscale double = 1.5
+            end
+
+            p_base = mlpmod.Pmod(filename=fn_base);
+            t_base = p_base.tacs;
+            suv_base = table2array(t_base(:, 4:end));
+            suv_base = suv_base * p_base.weight / p_base.dose / 37;
+
+            p_block = mlpmod.Pmod(filename=fn_block);
+            t_block = p_block.tacs;
+            suv_block = table2array(t_block(:, 4:end));
+            suv_block = suv_block * p_block.dose / p_block.weight / 37;
+
+            p_block2 = mlpmod.Pmod(filename=fn_block2);
+            t_block2 = p_block2.tacs;
+            suv_block2 = table2array(t_block2(:, 4:end));
+            suv_block2 = suv_block2 * p_block2.weight / p_block2.dose / 37;
+
+            % cmap = cbrewer2('qual', 'Set2', 3, 'pchip');
+            cmap = cividis(3);
+            % region_names = string(t_base.Properties.VariableNames(4:end));
+            % region_names = strrep(region_names, "tac_", "");
+            % region_names = strrep(region_names, "_kBq_cc_", "");
+            % region_index = contains(region_names, opts.region_key, IgnoreCase=true);
+            region_names = [ ...                
+                "whole brain", ...
+                "prefrontal", ...
+                "base frontal", ...
+                "anterior cingulate", ...
+                "caudate", ...
+                "putamen", ...
+                "insula", ...
+                "lateral temporal", ...
+                "medial temporal", ...
+                "amygdala", ...
+                "hippocampus", ...
+                "thalamus", ...
+                "hypothalamus", ...
+                "parietal", ...
+                "posterior cingulate", ...
+                "occipital", ...
+                "pons", ...
+                "midbrain", ...
+                "corpus callosum", ...
+                "cortical white matter", ...
+                "cerebellum"];
+
+            % suv_diff = suv_block - suv_base;
+            suv_taus = t_base{:, 3};
+            suv_timesMid = t_base{:, 2} / 60;  % min
+            times = 0:1:suv_timesMid(end);  % + suv_taus(end)/2);
+            the_max = max([suv_base, suv_block, suv_block2], [], "all");
+
+
+            %% whole brain
+
+            h = figure;   
+            r = 1;
+
+            interp_base = interp1(suv_timesMid, suv_base(:, r), times, "spline");
+            interp_base(interp_base < 0 ) = 0;
+            interp_block = interp1(suv_timesMid, suv_block(:, r), times, "spline");
+            interp_block(interp_block < 0 ) = 0;
+            interp_block2 = interp1(suv_timesMid, suv_block2(:, r), times, "spline");
+            interp_block2(interp_block2 < 0 ) = 0;
+
+            hold("on")
+            plot(suv_timesMid, suv_base(:, r), LineStyle="none", Marker=opts.mark, MarkerSize=opts.msize, Color=cmap(1, :));
+            plot(times, interp_base, LineStyle="-", LineWidth=opts.lwidth, Color=cmap(1, :));
+            plot(suv_timesMid, suv_block(:, r), LineStyle="none", Marker=opts.mark, MarkerSize=opts.msize, Color=cmap(2, :));
+            plot(times, interp_block, LineStyle="-", LineWidth=opts.lwidth, Color=cmap(2, :));
+            plot(suv_timesMid, suv_block2(:, r), LineStyle="none", Marker=opts.mark, MarkerSize=opts.msize, Color=cmap(3, :));
+            plot(times, interp_block2, LineStyle="-", LineWidth=opts.lwidth, Color=cmap(3, :));
+            hold("off")
+            legend(opts.legend);
+            xlabel("Time (min)");
+            ylabel("SUV (g/cm^3)");
+            ylim([0, the_max]);
+            title(region_names(r));
+
+            fontsize(scale=opts.fscale);
+            saveFigure2(h, "whole_brain_including_blocking")
+
+
+            %% regions
+
+            htiled = figure;            
+            tiledlayout(4, 5)
+            for r = 2:21
+                nexttile
+
+                interp_base = interp1(suv_timesMid, suv_base(:, r), times, "spline");
+                interp_base(interp_base < 0 ) = 0;
+                interp_block = interp1(suv_timesMid, suv_block(:, r), times, "spline");
+                interp_block(interp_block < 0 ) = 0;
+                interp_block2 = interp1(suv_timesMid, suv_block2(:, r), times, "spline");
+                interp_block2(interp_block2 < 0 ) = 0;
+
+                hold("on")
+                plot(suv_timesMid, suv_base(:, r), LineStyle="none", Marker=opts.mark, MarkerSize=opts.msize, Color=cmap(1, :));
+                plot(times, interp_base, LineStyle="-", LineWidth=opts.lwidth, Color=cmap(1, :));
+                plot(suv_timesMid, suv_block(:, r), LineStyle="none", Marker=opts.mark, MarkerSize=opts.msize, Color=cmap(2, :));
+                plot(times, interp_block, LineStyle="-", LineWidth=opts.lwidth, Color=cmap(2, :));
+                plot(suv_timesMid, suv_block2(:, r), LineStyle="none", Marker=opts.mark, MarkerSize=opts.msize, Color=cmap(3, :));
+                plot(times, interp_block2, LineStyle="-", LineWidth=opts.lwidth, Color=cmap(3, :));
+                hold("off")
+                % legend(opts.legend);
+                if r == 2 || r == 7 || r == 12 || r == 17 
+                    ylabel("SUV (g/cm^3)");
+                else
+                    set(gca, yticklabels=[])
+                end
+                if r == 17 || r == 18 || r == 19 || r == 20 || r == 21
+                    xlabel("Time (min)");
+                else
+                    set(gca, xticklabels=[])
+                end
+                ylim([0, the_max]);
+                title(region_names(r));
+            end
+            fontsize(scale=opts.fscale);
+            saveFigure2(htiled, "regions_including_blocking")
+        end
+
+        function s = rename_animals(s)
+            given_names = ["bud", "cheech", "lou", "ollie"];
+            anon_names = "nhprimate" + (1:4);
+            for idx = 1:length(given_names)
+                s = strrep(s, given_names(idx), anon_names(idx));
+            end
         end
     end
 
@@ -261,6 +662,7 @@ classdef TZ3108 < handle & mlsystem.IHandle
 
     properties (Access = private)
         kmdata_
+        pmod_
         solver_
     end
 

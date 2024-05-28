@@ -29,6 +29,10 @@ classdef Ro948Kit < handle & mlsystem.IHandle
         color_maroon = ""
     end
 
+    properties (Constant)
+        do_decay_correct = false  % Rick does external decay correction
+    end
+
     properties (Dependent)
         chemdir
         crv
@@ -161,8 +165,10 @@ classdef Ro948Kit < handle & mlsystem.IHandle
             this.T_minimal_ = addvars(T, Time, Before=1, NewVariableNames="Time");
 
             % decay-correct table minimal from syringe measurements
-            %this.T_minimal_.wbKBq_mL = this.T_minimal_.wbKBq_mL .* 2.^(Time/this.half_life);
-            %this.T_minimal_.plasmaKBq_mL = this.T_minimal_.plasmaKBq_mL .* 2.^(Time/this.half_life);
+            if this.do_decay_correct
+                this.T_minimal_.wbKBq_mL = this.T_minimal_.wbKBq_mL .* 2.^(Time/this.half_life);
+                this.T_minimal_.plasmaKBq_mL = this.T_minimal_.plasmaKBq_mL .* 2.^(Time/this.half_life);
+            end
 
             g = this.T_minimal_;
         end
@@ -332,6 +338,8 @@ classdef Ro948Kit < handle & mlsystem.IHandle
         end
 
         function [h,V] = build_pow(this, opts)
+            %% build plasma over whole-blood fractions
+
             arguments
                 this mlwong.Ro948Kit
                 opts.visible_interval double = 30 % visible from start of syringe samples (min)
