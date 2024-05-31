@@ -287,6 +287,7 @@ classdef Ro948Kit < handle & mlsystem.IHandle
             % deconvBayes
             M_ = this.crv.timetable().Coincidence(idx0:idxF)*this.inveff; % col
             cath = mlswisstrace.Catheter_DT20190930( ...
+                model_kind='2bolus', ...
                 Measurement=M_, hct=hct, tracer=this.tracer); 
             M = zeros(size(this.crv.timetable().Coincidence)); % col
             % t0 reflects rigid extension + Luer valve + cath in Twilite cradle
@@ -588,7 +589,7 @@ classdef Ro948Kit < handle & mlsystem.IHandle
                 opts.tracer = "RO948"
                 opts.timeCliff double = 300
                 opts.N_average_minimal double = 1
-                opts.Delta double = 1/60
+                opts.Delta double = 1/5
             end
             this.toi = opts.toi;
             this.sesdir = opts.sesdir;
