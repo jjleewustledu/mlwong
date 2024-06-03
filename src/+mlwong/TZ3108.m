@@ -18,6 +18,9 @@ classdef TZ3108 < handle & mlsystem.IHandle
     properties (Constant)
         home = "/Users/jjlee/Documents/PapersMine/PapersInProgress/Will_Tu/minus-TZ3108";
         bids_home = "/Users/jjlee/Singularity/TZ3108/derivatives"
+        LABELS = [ ...
+            "H: V_T", "H: BP_{ND}", "H: BP_P", "H: log_{10}(K_1)", "H: log_{10}(k_2)", "H: log_{10}(k_3)", "H: log_{10}(k_4)", "H: sigma", "H: log(Z)", ...
+            "I: V_T", "I: BP_{ND}", "I: BP_P", "I: log_{10}(K_1)", "I: log_{10}(k_2)", "I: log_{10}(k_3)", "I: log_{10}(k_4)", "I: sigma", "I: log(Z)"];
     end
 
     properties (Dependent)
@@ -262,84 +265,9 @@ classdef TZ3108 < handle & mlsystem.IHandle
             set(h, position=[100,100,1000,700]) % position and size of window on display
         end
 
-
-
-
-    end
-
-    methods (Static)
-        function this = create(kmd_fqfn, opts)
+        function [htiled,h] = plot_age_dependence(this, fns, opts)
             arguments
-                kmd_fqfn {mustBeFile}
-                opts.N_ensemble double {mustBeInteger} = 10
-            end
-
-            this = mlwong.TZ3108();
-            this.N_ensemble = opts.N_ensemble;
-            this.kmdata_ = mlpmod.KMData.create(kmd_fqfn);
-            this.pmod_ = mlpmod.Pmod(filename=kmd_fqfn);
-        end
-
-        function create_all_niftis()
-            this = mlwong.TZ3108();
-            pwd0 = pushd(this.home);
-            
-            globbed = [mglob(this.proc_verified_kmdata_xls), mglob(this.proc_aif_kmdata_xls)];
-            for idx = 1:length(globbed)
-                p = mlpmod.Pmod(filename=globbed(idx));
-                [aif_,tacs_] = p.build_nifti();
-                aif_.save();
-                tacs_.save();
-            end
-
-            popd(pwd0);
-        end
-
-        function [t,h] = create_population_aif()
-            %% Normalizes measured AIFs with time average of PET, \int^T dt whole_brain(t)/T,
-            %  then interpolates to 1 sec, then obtains mean across measurements.
-            %  Saves table to mlwong.TZ3108.home as stackstr() + ".mat".
-            %  
-            globbed = mglob( ...
-                fullfile(mlwong.TZ3108.home, "sub-*/ses-*/chemistry/sub-*_ses-*_proc-verified-pkin.kmData.xls"));
-            Ng = length(globbed);
-            assert(Ng > 0)
-            ps = cell(1, Ng);
-            aifs = cell(1, Ng);
-            suv = [];
-            for idx = 1:Ng
-                ps{idx} = mlpmod.Pmod(filename=globbed(idx)); 
-                aifs{idx} = ps{idx}.aif_as_suv(interp_method="pchip", T=150); 
-                suv = [suv, aifs{idx}.suv]; %#ok<AGROW>
-            end
-            suv = mean(suv, 2);
-            time_min = aifs{1}.time_min;
-            t = table(time_min, suv);
-            save(fullfile(mlwong.TZ3108.home, stackstr(use_underscores=true) + ".mat"), "t");
-
-            h = figure; 
-            hold("on");
-            for idx = 1:Ng
-                plot(ps{idx}.aif_as_suv, "time_min", "suv", LineStyle="-", Marker="o", MarkerSize=8); 
-            end
-            plot(t, "time_min", "suv", LineStyle="-", LineWidth=2, Color="k");
-            legend([ ...
-                "n.h. primate 1, (-), Yun122", ...
-                "n.h. primate 2, (-), N_2O ", ...
-                "n.h. primate 2, (-)", ...
-                "n.h. primate 3, (+)", ...
-                "n.h. primate 4, (-)", ...
-                "cohort"], Interpreter="none");
-            xlim([-10, 160]);
-            xlabel("time (min)");
-            ylabel("AIF SUV (g/cm^3");
-            title("Cohort-based AIF from metabolite-corrected plasma AIFs");
-            hold("off");
-            fontsize(scale=1.25);
-        end
-
-        function [htiled,h] = plot_age_dependence(fns, opts)
-            arguments
+                this mlwong.TZ3108
                 fns {mustBeText}
                 opts.lwidth double = 2
                 opts.fscale double = 1.5
@@ -515,13 +443,22 @@ classdef TZ3108 < handle & mlsystem.IHandle
             saveFigure2(htiled, "regions_age")
         end
 
-        function [htiled,h] = plot_blocking(fn_base, fn_block, fn_block2, opts)
+        function [htiled,h] = plot_blocking(this, fn_base, fn_block, fn_block2, opts)
+            %% plots scans of Bud from 2014-2016.
+            %  cd('/Volumes/T7 Shield/TZ3108')
+            %  PETDIR = pwd;
+            %  cd('/Users/jjlee/Documents/PapersMine/PapersInProgress/Will_Tu/minus-TZ3108')
+            %  SUBDIR = pwd;
+            %  globbed = mglob("sub-*/ses-*/chemistry/sub-*_ses-*_proc-*-pkin.kmData.xls");
+            %  mlwong.TZ3108.plot_blocking(globbed(2), globbed(1), globbed(3))
+
             arguments
+                this mlwong.TZ3108
                 fn_base {mustBeFile}
                 fn_block {mustBeFile}
                 fn_block2 {mustBeFile}
                 opts.region_key {mustBeTextScalar} = "cerebellum"
-                opts.legend {mustBeText} = ["", "baseline", "", "blocked by YUN122", "", "blocked by SA4503"]
+                opts.legend {mustBeText} = ["", "baseline", "", "blocked by Yun122", "", "blocked by SA4503"]
                 opts.lwidth double = 4
                 opts.mark {mustBeTextScalar} = "+"
                 opts.msize double = 12
@@ -649,6 +586,293 @@ classdef TZ3108 < handle & mlsystem.IHandle
             saveFigure2(htiled, "regions_including_blocking")
         end
 
+        function plot_spider_blocking(this)
+
+            cd("/Volumes/T7 Shield/TZ3108/derivatives");
+            
+            petdir = fullfile(getenv("SINGULARITY_HOME"), "TZ3108");
+            subdir = fullfile(petdir, "derivatives", "sub-bud");
+            sesdirs = fullfile(subdir, "ses-*");
+            mglobbed = mglob(sesdirs);
+            mglobbed = mglobbed([2, 1, 3]);
+
+            t = this.table_Huang_Ichise(sesdir=mglobbed);
+            
+            s = mlwong.TZ3108.create_spider_chart( ...
+                t, tcm.regions(1), ...
+                axes_labels="none", ...
+                reordering=[14:-1:10 1:9 18:-1:15], ...
+                legend_visible=false, ...
+                color=cividis(3), ...
+                fill_option=true);
+                        
+            ss = mlwong.TZ3108.create_spider_charts( ...
+                t, tcm.regions, ...
+                reordering = [14:-1:10 1:9 18:-1:15], ...
+                color=cividis(3), ...
+                fill_option=true);
+        end
+
+        function plot_spider_age_dependence(this)
+
+            cd("/Volumes/T7 Shield/TZ3108/derivatives");
+
+            [sess,legend] = this.ses_sorted_by_age();
+            cmap = viridis(length(sess));
+            t = this.table_Huang_Ichise(sesdir=sess);
+            tcm = mldynesty.TCModel.load(sess(1), model="Ichise2002VascModel");
+
+            s = mlwong.TZ3108.create_spider_chart( ...
+                t, tcm.regions(1), ...
+                axes_labels="none", ...
+                data_labels=asrow(legend), ...)
+                reordering=[14:-1:10 1:9 18:-1:15], ...
+                legend_visible=true, ...
+                color=cmap, ...
+                fill_option=false);
+                        
+            ss = mlwong.TZ3108.create_spider_charts( ...
+                t, tcm.regions, ...
+                reordering = [14:-1:10 1:9 18:-1:15], ...
+                color=cmap, ...
+                fill_option=false);
+        end
+
+        function [sess,legend] = ses_sorted_by_age(this)
+            %% excludes blocking studies
+
+            petdir = fullfile(getenv("SINGULARITY_HOME"), "TZ3108");
+            kmData = mglob(fullfile(petdir, "derivatives/sub-*/ses-*/chemistry/sub-*_ses-*_proc-*-pkin.kmData.xls"));
+            sess = fileparts(fileparts(kmData));
+            p_bases = cell(1, length(kmData));
+            for kidx = 1:length(kmData)
+                p_bases{kidx} = mlpmod.Pmod(filename=kmData{kidx});
+            end
+
+            % remove blocking & not ready & logz ~ -inf
+            is_blocking = contains(kmData, "ses-20140724") | contains(kmData, "ses-20160309");
+            not_ready = ...
+                contains(kmData, "ses-20230406") | ...
+                contains(kmData, "ses-20230328") | ...
+                contains(kmData, "ses-20120406") | ...
+                contains(kmData, "ses-20230516");
+            logz_nan = contains(kmData, "ses-20150911");            
+            p_bases = p_bases(~is_blocking & ~not_ready & ~logz_nan);
+            sess = sess(~is_blocking & ~not_ready & ~logz_nan);
+
+            % sort by age
+            ages = cell(size(p_bases));
+            for pidx = 1:length(p_bases)
+                ages{pidx} = p_bases{pidx}.age_acquisition;
+            end
+            ages = cell2mat(ages);
+            %ages = cellfun(@(x) x.age_acquisition, p_bases);  % numeric
+            [sorted_ages, sorting_idx] = sort(ages);
+            legend = num2str(ascol(sorted_ages), "%.2f") + " y";
+            sess = ascol(sess(sorting_idx));
+        end
+
+        function t = table_Huang_Ichise(this, opts)
+            arguments
+                this mlwong.TZ3108
+                opts.sesdirs {mustBeText}
+            end
+            if any(contains(opts.sesdirs, "*"))
+                opts.sesdirs = mglob(opts.sesdirs);
+            end
+
+            % Huang ------------------------------
+            t_H = table();
+            for ses = asrow(opts.sesdirs)
+                try
+                    tcm = mldynesty.TCModel.load(ses, model="Huang1980Model");
+                    t_H = [t_H; tcm.table()]; %#ok<AGROW>
+                catch ME
+                    handwarning(ME)
+                end
+            end
+            t_H.Properties.VariableNames = "Huang_" + t_H.Properties.VariableNames;
+            % ------------------------------------
+
+            % Ichise ------------------------------
+            t_I = table();
+            for ses = asrow(opts.sesdirs)
+                try
+                    tcm = mldynesty.TCModel.load(ses, model="Ichise2002VascModel");
+                    t_I = [t_I; tcm.table()]; %#ok<AGROW>
+                catch ME
+                    handwarning(ME)
+                end
+            end
+            t_I.Properties.VariableNames = "Ichise_" + t_I.Properties.VariableNames;
+            % -------------------------------------
+
+            t = [t_H, t_I(:, 2:end)];  % exclude duplicate Region column
+            t.Properties.VariableNames(1) = "Region";  % "Huang_Region" -> "Region"
+            t{:,5:8} = log10(t{:,5:8});  % k_i -> log10(k_i)
+            t{:,14:17} = log10(t{:,14:17});  % k_i -> log10(k_i)
+        end
+    end
+
+    methods (Static)
+        function this = create_kmd(kmd_fqfn, opts)
+            arguments
+                kmd_fqfn {mustBeFile}
+                opts.N_ensemble double {mustBeInteger} = 10
+            end
+
+            this = mlwong.TZ3108();
+            this.N_ensemble = opts.N_ensemble;
+            this.kmdata_ = mlpmod.KMData.create(kmd_fqfn);
+            this.pmod_ = mlpmod.Pmod(filename=kmd_fqfn);
+        end
+
+        function create_all_niftis()
+            this = mlwong.TZ3108();
+            pwd0 = pushd(this.home);
+            
+            globbed = [mglob(this.proc_verified_kmdata_xls), mglob(this.proc_aif_kmdata_xls)];
+            for idx = 1:length(globbed)
+                p = mlpmod.Pmod(filename=globbed(idx));
+                [aif_,tacs_] = p.build_nifti();
+                aif_.save();
+                tacs_.save();
+            end
+
+            popd(pwd0);
+        end
+
+        function lims = create_axes_limits(df)
+            %% finds lims 1:N for two models; 
+            %  so, after removing Region variable, size(df, 2) == 2*N
+
+            assert(any(contains(df.Properties.VariableNames, "Region")))
+            df.Region = [];
+            
+            a_all_models = table2array(df);
+            N_vars = size(a_all_models, 2)/2;
+
+            % vertically stack models so that all variables fit into N unique columns 
+            a_all_models = [a_all_models(:,1:N_vars); a_all_models(:,(N_vars+1):end)];
+
+            % horiz stack axes limits to fit two models
+            axes_mins = [min(a_all_models, [], 1), min(a_all_models, [], 1)];
+            axes_maxs = [max(a_all_models, [], 1), max(a_all_models, [], 1)];
+            lims = [axes_mins; axes_maxs];
+        end
+
+        function [t,h] = create_population_aif()
+            %% Normalizes measured AIFs with time average of PET, \int^T dt whole_brain(t)/T,
+            %  then interpolates to 1 sec, then obtains mean across measurements.
+            %  Saves table to mlwong.TZ3108.home as stackstr() + ".mat".
+            %  
+            globbed = mglob( ...
+                fullfile(mlwong.TZ3108.home, "sub-*/ses-*/chemistry/sub-*_ses-*_proc-verified-pkin.kmData.xls"));
+            Ng = length(globbed);
+            assert(Ng > 0)
+            ps = cell(1, Ng);
+            aifs = cell(1, Ng);
+            suv = [];
+            for idx = 1:Ng
+                ps{idx} = mlpmod.Pmod(filename=globbed(idx)); 
+                aifs{idx} = ps{idx}.aif_as_suv(interp_method="pchip", T=150); 
+                suv = [suv, aifs{idx}.suv]; %#ok<AGROW>
+            end
+            suv = mean(suv, 2);
+            time_min = aifs{1}.time_min;
+            t = table(time_min, suv);
+            save(fullfile(mlwong.TZ3108.home, stackstr(use_underscores=true) + ".mat"), "t");
+
+            h = figure; 
+            hold("on");
+            for idx = 1:Ng
+                plot(ps{idx}.aif_as_suv, "time_min", "suv", LineStyle="-", Marker="o", MarkerSize=8); 
+            end
+            plot(t, "time_min", "suv", LineStyle="-", LineWidth=2, Color="k");
+            legend([ ...
+                "n.h. primate 1, (-), Yun122", ...
+                "n.h. primate 2, (-), N_2O ", ...
+                "n.h. primate 2, (-)", ...
+                "n.h. primate 3, (+)", ...
+                "n.h. primate 4, (-)", ...
+                "cohort"], Interpreter="none");
+            xlim([-10, 160]);
+            xlabel("time (min)");
+            ylabel("AIF SUV (g/cm^3");
+            title("Cohort-based AIF from metabolite-corrected plasma AIFs");
+            hold("off");
+            fontsize(scale=1.25);
+        end
+
+        function s = create_spider_chart(df, region, opts)
+            arguments
+                df table
+                region {mustBeTextScalar} = "whole brain"
+                opts.axes_labels = mlwong.TZ3108.LABELS
+                opts.axes_limits {mustBeNumeric} = []
+                opts.data_labels {mustBeText} = "Data " + (1:100)
+                opts.reordering = [14:-1:10 1:9 18:-1:15]
+                opts.legend_visible logical = false
+                opts.color {mustBeNumeric}
+                opts.fill_option logical = false                
+            end
+            if ~isempty(opts.axes_labels) && ~strcmp(opts.axes_labels, "none")
+                opts.axes_labels = opts.axes_labels(opts.reordering);
+            end
+            if isempty(opts.axes_limits)
+                opts.axes_limits = mlwong.TZ3108.create_axes_limits(df);
+            end
+
+            df = df(strcmp(df.Region, region), 2:end);  % pick region, but then exclude Region variable
+            a = table2array(df);
+            a = a(:, opts.reordering);
+
+            s = mlplot.SpiderChart(a, RhoAxesVisible=false);
+
+            precision = [ ...
+                0, 0, 0, 2, 2, 2, 2, 2, 0, ...
+                0, 0, 0, 2, 2, 2, 2, 2, 0];
+            s.AxesLabels = opts.axes_labels;
+            s.AxesPrecision = precision(opts.reordering);
+            s.AxesLimits = opts.axes_limits(:, opts.reordering);
+            s.DataLabels = opts.data_labels;
+            s.LegendVisible = opts.legend_visible;
+            s.Color = opts.color;
+            if opts.fill_option
+                s.FillOption = "on";
+                s.FillTransparency = 0.25;
+            end
+        end
+
+        function ss = create_spider_charts(df, regions, opts)
+            arguments
+                df table
+                regions {mustBeText}
+                opts.data_labels {mustBeText} = "Data " + (1:100)
+                opts.reordering = [14:-1:10 1:9 18:-1:15];
+                opts.color {mustBeNumeric}
+                opts.fill_option logical = false
+            end
+
+            regions = convertCharsToStrings(regions);
+            axes_limits = mlwong.TZ3108.create_axes_limits(df);
+            for ridx = 1:length(regions)
+                figure;
+                s = mlwong.TZ3108.create_spider_chart( ...
+                    df, regions(ridx), ...
+                    axes_labels="none", ...
+                    axes_limits=axes_limits, ...
+                    reordering=opts.reordering, ...
+                    legend_visible=false, ...
+                    color=opts.color, ...
+                    fill_option=opts.fill_option);
+                s.AxesLabels = "none";
+                s.Color = opts.color;
+                title(regions(ridx), FontSize=14)
+                ss{ridx} = s;
+            end
+        end
+
         function s = rename_animals(s)
             given_names = ["bud", "cheech", "lou", "ollie"];
             anon_names = "nhprimate" + (1:4);
@@ -664,11 +888,6 @@ classdef TZ3108 < handle & mlsystem.IHandle
         kmdata_
         pmod_
         solver_
-    end
-
-    methods (Access = private)
-        function this = TZ3108()
-        end
     end
     
     %  Created with mlsystem.Newcl, inspired by Frank Gonzalez-Morphy's newfcn.
