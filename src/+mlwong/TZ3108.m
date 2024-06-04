@@ -19,8 +19,10 @@ classdef TZ3108 < handle & mlsystem.IHandle
         home = "/Users/jjlee/Documents/PapersMine/PapersInProgress/Will_Tu/minus-TZ3108";
         bids_home = "/Users/jjlee/Singularity/TZ3108/derivatives"
         LABELS = [ ...
-            "H: V_T", "H: BP_{ND}", "H: BP_P", "H: log_{10}(K_1)", "H: log_{10}(k_2)", "H: log_{10}(k_3)", "H: log_{10}(k_4)", "H: sigma", "H: log(Z)", ...
-            "I: V_T", "I: BP_{ND}", "I: BP_P", "I: log_{10}(K_1)", "I: log_{10}(k_2)", "I: log_{10}(k_3)", "I: log_{10}(k_4)", "I: sigma", "I: log(Z)"];
+            "V_T", "BP_{ND}", "K_1", "k_2", "k_3", "k_4", "sigma", "log(Z)"];
+        LABELS_2MODELS = [ ...
+            "H: log_{10}(V_T)", "H: log_{10}(BP_{ND})", "H: log_{10}(BP_P)", "H: log_{10}(K_1)", "H: log_{10}(k_2)", "H: log_{10}(k_3)", "H: log_{10}(k_4)", "H: sigma", "H: log(Z)", ...
+            "I: log_{10}(V_T)", "I: log_{10}(BP_{ND})", "I: log_{10}(BP_P)", "I: log_{10}(K_1)", "I: log_{10}(k_2)", "I: log_{10}(k_3)", "I: log_{10}(k_4)", "I: sigma", "I: log(Z)"];
     end
 
     properties (Dependent)
@@ -596,21 +598,25 @@ classdef TZ3108 < handle & mlsystem.IHandle
             mglobbed = mglob(sesdirs);
             mglobbed = mglobbed([2, 1, 3]);
 
-            t = this.table_Huang_Ichise(sesdir=mglobbed);
+            legend = ["baseline", "Yun122", "SA4503"];
+            [t,tcm] = this.table_Ichise(sesdir=mglobbed);
             
             s = mlwong.TZ3108.create_spider_chart( ...
                 t, tcm.regions(1), ...
                 axes_labels="none", ...
-                reordering=[14:-1:10 1:9 18:-1:15], ...
-                legend_visible=false, ...
+                data_labels=asrow(legend), ...
+                reordering=1:length(this.LABELS), ...
+                legend_visible=true, ...
                 color=cividis(3), ...
                 fill_option=true);
+            title(tcm.regions(1), FontSize=14)
                         
             ss = mlwong.TZ3108.create_spider_charts( ...
                 t, tcm.regions, ...
-                reordering = [14:-1:10 1:9 18:-1:15], ...
+                reordering=1:length(this.LABELS), ...
                 color=cividis(3), ...
-                fill_option=true);
+                fill_option=true, ...                
+                fill_transparency=0.25);
         end
 
         function plot_spider_age_dependence(this)
@@ -619,10 +625,66 @@ classdef TZ3108 < handle & mlsystem.IHandle
 
             [sess,legend] = this.ses_sorted_by_age();
             cmap = viridis(length(sess));
-            t = this.table_Huang_Ichise(sesdir=sess);
-            tcm = mldynesty.TCModel.load(sess(1), model="Ichise2002VascModel");
+            [t,tcm] = this.table_Ichise(sesdir=sess);
 
             s = mlwong.TZ3108.create_spider_chart( ...
+                t, tcm.regions(1), ...
+                axes_labels="none", ...
+                data_labels=asrow(legend), ...
+                reordering=1:length(this.LABELS), ...
+                legend_visible=true, ...
+                color=cmap, ...
+                fill_option=false, ...               
+                fill_transparency=0.05, ...
+                line_width=1.5);
+            title(tcm.regions(1), FontSize=14)
+                        
+            ss = mlwong.TZ3108.create_spider_charts( ...
+                t, tcm.regions, ...
+                reordering=1:length(this.LABELS), ...
+                color=cmap, ...
+                fill_option=false, ...
+                fill_transparency=0.05, ...
+                line_width=1.5);
+        end
+
+        function plot_spider_blocking_2model(this)
+
+            cd("/Volumes/T7 Shield/TZ3108/derivatives");
+            
+            petdir = fullfile(getenv("SINGULARITY_HOME"), "TZ3108");
+            subdir = fullfile(petdir, "derivatives", "sub-bud");
+            sesdirs = fullfile(subdir, "ses-*");
+            mglobbed = mglob(sesdirs);
+            mglobbed = mglobbed([2, 1, 3]);
+
+            [t,tcm] = this.table_Huang_Ichise(sesdir=mglobbed);
+            
+            s = mlwong.TZ3108.create_spider_chart_2models( ...
+                t, tcm.regions(1), ...
+                axes_labels="none", ...
+                reordering=[14:-1:10 1:9 18:-1:15], ...
+                legend_visible=false, ...
+                color=cividis(3), ...
+                fill_option=true);
+            title(tcm.regions(1), FontSize=14)
+                        
+            ss = mlwong.TZ3108.create_spider_charts_2models( ...
+                t, tcm.regions, ...
+                reordering = [14:-1:10 1:9 18:-1:15], ...
+                color=cividis(3), ...
+                fill_option=true);
+        end
+
+        function plot_spider_age_dependence_2models(this)
+
+            cd("/Volumes/T7 Shield/TZ3108/derivatives");
+
+            [sess,legend] = this.ses_sorted_by_age();
+            cmap = viridis(length(sess));
+            [t,tcm] = this.table_Huang_Ichise(sesdir=sess);
+
+            s = mlwong.TZ3108.create_spider_chart_2models( ...
                 t, tcm.regions(1), ...
                 axes_labels="none", ...
                 data_labels=asrow(legend), ...)
@@ -630,8 +692,9 @@ classdef TZ3108 < handle & mlsystem.IHandle
                 legend_visible=true, ...
                 color=cmap, ...
                 fill_option=false);
+            title(tcm.regions(1), FontSize=14)
                         
-            ss = mlwong.TZ3108.create_spider_charts( ...
+            ss = mlwong.TZ3108.create_spider_charts_2models( ...
                 t, tcm.regions, ...
                 reordering = [14:-1:10 1:9 18:-1:15], ...
                 color=cmap, ...
@@ -672,7 +735,7 @@ classdef TZ3108 < handle & mlsystem.IHandle
             sess = ascol(sess(sorting_idx));
         end
 
-        function t = table_Huang_Ichise(this, opts)
+        function [t,tcm] = table_Huang(this, opts)
             arguments
                 this mlwong.TZ3108
                 opts.sesdirs {mustBeText}
@@ -691,6 +754,30 @@ classdef TZ3108 < handle & mlsystem.IHandle
                     handwarning(ME)
                 end
             end
+            % ------------------------------------
+
+            % t{:,5:8} = log10(t{:,5:8});  % k_i -> log10(k_i)
+        end
+
+        function [t,tcm] = table_Huang_Ichise(this, opts)
+            arguments
+                this mlwong.TZ3108
+                opts.sesdirs {mustBeText}
+            end
+            if any(contains(opts.sesdirs, "*"))
+                opts.sesdirs = mglob(opts.sesdirs);
+            end
+
+            % Huang ------------------------------
+            t_H = table();
+            for ses = asrow(opts.sesdirs)
+                try
+                    tcm = mldynesty.TCModel.load(ses, model="Huang1980Model");
+                    t_H = [t_H; tcm.table_9param()]; %#ok<AGROW>
+                catch ME
+                    handwarning(ME)
+                end
+            end
             t_H.Properties.VariableNames = "Huang_" + t_H.Properties.VariableNames;
             % ------------------------------------
 
@@ -699,7 +786,7 @@ classdef TZ3108 < handle & mlsystem.IHandle
             for ses = asrow(opts.sesdirs)
                 try
                     tcm = mldynesty.TCModel.load(ses, model="Ichise2002VascModel");
-                    t_I = [t_I; tcm.table()]; %#ok<AGROW>
+                    t_I = [t_I; tcm.table_9param()]; %#ok<AGROW>
                 catch ME
                     handwarning(ME)
                 end
@@ -709,8 +796,32 @@ classdef TZ3108 < handle & mlsystem.IHandle
 
             t = [t_H, t_I(:, 2:end)];  % exclude duplicate Region column
             t.Properties.VariableNames(1) = "Region";  % "Huang_Region" -> "Region"
-            t{:,5:8} = log10(t{:,5:8});  % k_i -> log10(k_i)
-            t{:,14:17} = log10(t{:,14:17});  % k_i -> log10(k_i)
+            t{:,2:8} = log10(t{:,2:8});  % k_i -> log10(k_i), also V_T and BP
+            t{:,11:17} = log10(t{:,11:17});  % k_i -> log10(k_i), also V_T and BP
+        end
+
+        function [t,tcm] = table_Ichise(this, opts)
+            arguments
+                this mlwong.TZ3108
+                opts.sesdirs {mustBeText}
+            end
+            if any(contains(opts.sesdirs, "*"))
+                opts.sesdirs = mglob(opts.sesdirs);
+            end
+
+            % Ichise ------------------------------
+            t = table();
+            for ses = asrow(opts.sesdirs)
+                try
+                    tcm = mldynesty.TCModel.load(ses, model="Ichise2002VascModel");
+                    t = [t; tcm.table()]; %#ok<AGROW>
+                catch ME
+                    handwarning(ME)
+                end
+            end
+            % -------------------------------------
+
+            % t{:,5:8} = log10(t{:,5:8});  % k_i -> log10(k_i)
         end
     end
 
@@ -747,17 +858,19 @@ classdef TZ3108 < handle & mlsystem.IHandle
             %  so, after removing Region variable, size(df, 2) == 2*N
 
             assert(any(contains(df.Properties.VariableNames, "Region")))
-            df.Region = [];
-            
+            df.Region = [];            
             a_all_models = table2array(df);
-            N_vars = size(a_all_models, 2)/2;
 
             % vertically stack models so that all variables fit into N unique columns 
-            a_all_models = [a_all_models(:,1:N_vars); a_all_models(:,(N_vars+1):end)];
+            % N_vars = size(a_all_models, 2)/2;
+            % a_all_models = [a_all_models(:,1:N_vars); a_all_models(:,(N_vars+1):end)];
 
             % horiz stack axes limits to fit two models
-            axes_mins = [min(a_all_models, [], 1), min(a_all_models, [], 1)];
-            axes_maxs = [max(a_all_models, [], 1), max(a_all_models, [], 1)];
+            % axes_mins = [min(a_all_models, [], 1), min(a_all_models, [], 1)];
+            % axes_maxs = [max(a_all_models, [], 1), max(a_all_models, [], 1)];
+
+            axes_mins = min(a_all_models, [], 1);
+            axes_maxs = max(a_all_models, [], 1);
             lims = [axes_mins; axes_maxs];
         end
 
@@ -811,6 +924,83 @@ classdef TZ3108 < handle & mlsystem.IHandle
                 opts.axes_labels = mlwong.TZ3108.LABELS
                 opts.axes_limits {mustBeNumeric} = []
                 opts.data_labels {mustBeText} = "Data " + (1:100)
+                opts.reordering = 1:length(mlwong.TZ3108.LABELS)
+                opts.legend_visible logical = false
+                opts.line_width {mustBeScalarOrEmpty} = 3
+                opts.color {mustBeNumeric}
+                opts.fill_option logical = false     
+                opts.fill_transparency double = 0.25
+            end
+            if ~isempty(opts.axes_labels) && ~strcmp(opts.axes_labels, "none")
+                opts.axes_labels = opts.axes_labels(opts.reordering);
+            end
+            if isempty(opts.axes_limits)
+                if region == "whole brain"
+                    opts.axes_limits = mlwong.TZ3108.create_axes_limits(df(df.Region=="whole brain",:));
+                else
+                    opts.axes_limits = mlwong.TZ3108.create_axes_limits(df);
+                end
+            end
+
+            df = df(strcmp(df.Region, region), 2:end);  % pick region, but then exclude Region variable
+            a = table2array(df);
+            a = a(:, opts.reordering);
+
+            s = mlplot.SpiderChart(a, LineWidth=opts.line_width, RhoAxesVisible=false);
+
+            precision = [ ...
+                0, 0, 2, 2, 2, 2, 2, 0];
+            s.AxesLabels = opts.axes_labels;
+            s.AxesPrecision = precision(opts.reordering);
+            s.AxesLimits = opts.axes_limits(:, opts.reordering);
+            s.DataLabels = opts.data_labels;
+            s.LegendVisible = opts.legend_visible;
+            s.Color = opts.color;
+            if opts.fill_option
+                s.FillOption = "on";
+                s.FillTransparency = opts.fill_transparency;
+            end
+        end
+
+        function ss = create_spider_charts(df, regions, opts)
+            arguments
+                df table
+                regions {mustBeText}
+                opts.data_labels {mustBeText} = "Data " + (1:100)
+                opts.line_width {mustBeScalarOrEmpty} = 3
+                opts.reordering = 1:length(mlwong.TZ3108.LABELS)
+                opts.color {mustBeNumeric}
+                opts.fill_option logical = false
+                opts.fill_transparency double = 0.25
+            end
+
+            regions = convertCharsToStrings(regions);
+            axes_limits = mlwong.TZ3108.create_axes_limits(df);
+            for ridx = 1:length(regions)
+                figure;
+                s = mlwong.TZ3108.create_spider_chart( ...
+                    df, regions(ridx), ...
+                    axes_labels="none", ...
+                    axes_limits=axes_limits, ...
+                    reordering=opts.reordering, ...
+                    legend_visible=false, ...
+                    line_width=opts.line_width, ...
+                    color=opts.color, ...
+                    fill_option=opts.fill_option);
+                s.AxesLabels = "none";
+                s.Color = opts.color;
+                title(regions(ridx), FontSize=14)
+                ss{ridx} = s;
+            end
+        end
+
+        function s = create_spider_chart_2models(df, region, opts)
+            arguments
+                df table
+                region {mustBeTextScalar} = "whole brain"
+                opts.axes_labels = mlwong.TZ3108.LABELS_2MODELS
+                opts.axes_limits {mustBeNumeric} = []
+                opts.data_labels {mustBeText} = "Data " + (1:100)
                 opts.reordering = [14:-1:10 1:9 18:-1:15]
                 opts.legend_visible logical = false
                 opts.color {mustBeNumeric}
@@ -820,7 +1010,11 @@ classdef TZ3108 < handle & mlsystem.IHandle
                 opts.axes_labels = opts.axes_labels(opts.reordering);
             end
             if isempty(opts.axes_limits)
-                opts.axes_limits = mlwong.TZ3108.create_axes_limits(df);
+                if region == "whole brain"
+                    opts.axes_limits = mlwong.TZ3108.create_axes_limits(df(df.Region=="whole brain",:));
+                else
+                    opts.axes_limits = mlwong.TZ3108.create_axes_limits(df);
+                end
             end
 
             df = df(strcmp(df.Region, region), 2:end);  % pick region, but then exclude Region variable
@@ -844,7 +1038,7 @@ classdef TZ3108 < handle & mlsystem.IHandle
             end
         end
 
-        function ss = create_spider_charts(df, regions, opts)
+        function ss = create_spider_charts_2models(df, regions, opts)
             arguments
                 df table
                 regions {mustBeText}
