@@ -11,6 +11,44 @@ classdef Test_Ro948Kit < matlab.unittest.TestCase
     end
     
     methods (Test)
+        function test_dynesty(this)
+            pwd0 = pushd(this.sesdir_);
+
+            opts.final_calc = "chemistry/2023-06-29_Final_Calculation.csv";
+            opts.fractions = "chemistry/2023-06-29_RO948_Metabolite_Fractions.csv";
+            opts.fileprefix = stackstr();
+            opts.toi = "29-Jun-2023 13:10:23";
+            opts.crv_filename = "twilite/R21_016_PET2_06292023_D1.crv";
+            opts.hct = "41.5";
+            opts.t0_forced = "47";
+            opts.time_cliff = "300";
+            
+
+            opts.toi = datetime(opts.toi, TimeZone = "local");
+            assert(contains(opts.crv_filename, ".crv"))
+            crv_ = mlswisstrace.CrvData(opts.crv_filename);
+
+            reneau = mlwong.ReneauAdapter( ...
+                sesdir=this.sesdir_, ...
+                final_calc=opts.final_calc, ...
+                fractions=opts.fractions, ...
+                fileprefix=opts.fileprefix);
+            reneau.readtables();
+            reneau.writetables();
+
+            this = mlwong.Ro948Kit( ...
+                toi=opts.toi, ...
+                crv=crv_, ...
+                fileprefix=opts.fileprefix, ...
+                hct = str2double(opts.hct), ...
+                t0_forced = str2double(opts.t0_forced), ...
+                timeCliff = str2double(opts.time_cliff));
+            %disp(this)
+            call_before_dynesty(this)
+
+            popd(pwd0)
+        end
+
         function test_standalone(this)
             pwd0 = pushd(this.sesdir_);
             cnami_standalone( ...

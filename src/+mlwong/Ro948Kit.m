@@ -324,16 +324,52 @@ classdef Ro948Kit < handle & mlsystem.IHandle
             popd(pwd0);
         end
 
+        function [h,T] = build_dispersed(this)
+            %% builds table and csv for Twilite + syringe samples from T_minimal
 
-        function [h,T] = build_deconv1(this, hct, t0_forced, opts)
             arguments
                 this mlwong.Ro948Kit
-                hct {mustBeScalarOrEmpty} = this.hct
-                t0_forced {mustBeScalarOrEmpty} = this.t0_forced
-                opts.timeCliff double = this.timeCliff
             end
 
             pwd0 = pushd(this.twildir);
+            
+            idx0 = this.index_toi_minus_30sec(); % TOI - 30 s
+            idxF = this.index_toi_plus_time_cliff_min(); % nominal TOI + 5 min blood draw 
+            toi_ = this.toi;
+
+            % assemble relevant portions of this.crv and this.T_minimal from Rick Reneau;
+            % then write csv
+            baseline = median(this.crv.timetable().Coincidence(1:(idx0-1))*this.inveff);
+            M_ = this.crv.timetable().Coincidence(idx0:idxF)*this.inveff; % col
+            M_ = M_ - baseline;
+            M = zeros(size(this.crv.timetable().Coincidence)); % col
+            M(idx0:idxF) = M_;
+
+            times_ = seconds(this.crv.time - this.crv.time(idx0)) - 30;  % zero at TOI for decay-correction
+            half_life_sec = 60*this.half_life;
+            decay_correction = 2.^(times_/half_life_sec);
+            scaling = this.T_minimal.plasmaKBq_mL(1)/median(M_(end-60:end));
+            M = scaling*ascol(M).*ascol(decay_correction);
+            M(M < 0) = 0;
+
+            times__ = times_ + 30;  % zero at idx0 for writetable
+            Time = [ascol(times__(idx0:idxF)); this.T_minimal.Time];
+            wbKBq_mL = [M(idx0:idxF); this.T_minimal.plasmaKBq_mL];  % N.B., using T_minimal to obtain kBq/mL
+
+            T = table(Time, wbKBq_mL);            
+            [~,fp] = myfileparts(this.crv.filename);
+            writetable(T, fullfile(this.twildir, fp+"_build_dispersed.csv"));
+
+            % plot wb specific activity alone
+            h = figure;
+            plot(T, "Time", "wbKBq_mL", LineStyle="none", Marker="+", MarkerSize=6)
+            xlabel("time (s)", FontSize=14, FontWeight='bold')
+            ylabel("wb activity (kBq/mL)", FontSize=14, FontWeight='bold')
+            title(sprintf("From %s", this.crv.filename), FontSize=16, Interpreter="none")   
+            fqfp = fullfile(this.twildir, fp+"_build_dispersed");
+            %if ~isfile(fqfp+".fig")
+                saveFigure2(h, fqfp)
+            %end
 
             popd(pwd0);
         end
@@ -387,6 +423,7 @@ classdef Ro948Kit < handle & mlsystem.IHandle
 
             popd(pwd0);
         end        
+
         function [h,T1] = build_Hill(this)
             pwd0 = pushd(this.chemdir);
 
@@ -428,6 +465,7 @@ classdef Ro948Kit < handle & mlsystem.IHandle
                 h = this.build_ptacs_no_twil();
             end
         end
+
         function h = build_ptacs_no_twil(this)
             %% total ptac & m.c. ptac
 
@@ -446,6 +484,7 @@ classdef Ro948Kit < handle & mlsystem.IHandle
             legend(["Syringe total", "Syringe metab. corr."]) 
             saveFigure2(h, fullfile(this.chemdir, this.fileprefix+"_ptacs_no_twil"));
         end
+
         function h = build_ptacs_twil(this)
             %% total ptac & m.c. ptac
 
@@ -469,6 +508,7 @@ classdef Ro948Kit < handle & mlsystem.IHandle
             legend(["Twilite total", "Syringe total", "Twilite metab. corr.", "Syringe metab. corr."]) 
             saveFigure2(h, fullfile(this.chemdir, this.fileprefix+"_ptacs_twil"));
         end
+
         function call(this)
             if ~isempty(this.crv)
                 this.build_deconv();
@@ -487,8 +527,35 @@ classdef Ro948Kit < handle & mlsystem.IHandle
             writetable(this.T_parent_frac, ...
                 fullfile(this.chemdir, this.fileprefix + "_parent_frac.csv"));
         end
+
+        function call_before_dynesty(this)
+            assert(~isempty(this.crv))
+            this.build_dispersed()
+        end
+
+        function call_after_dynesty(this)
+            assert(~isempty(this.crv))
+
+            % prep build_pow()
+
+            this.build_pow();
+            this.build_Hill();
+            this.build_ptacs();
+            this.plot_crvs();
+
+            %this.T_total_ptac % disp head & tail
+
+            writetable(this.T_total_ptac, ...
+                fullfile(this.chemdir, this.fileprefix + "_total_ptac.csv"));
+            writetable(this.T_metab_corr_ptac, ...
+                fullfile(this.chemdir, this.fileprefix + "_metab_corr_ptac.csv"));
+            writetable(this.T_parent_frac, ...
+                fullfile(this.chemdir, this.fileprefix + "_parent_frac.csv"));
+            
+        end
+
         function M1 = disperse(this, M)
-            %% disperse Measurement, which has been trimmed to interval of measurement
+            %% disperse Measurement slighly by this.Delta
 
             if ~isrow(M)
                 M = asrow(M);
@@ -506,6 +573,7 @@ classdef Ro948Kit < handle & mlsystem.IHandle
             M__ = conv(M, exp(-times*this.Delta))/AUC;
             M1 = M__(1:length(M));
         end
+
         function [h,h1,h2,h3] = plot(this)
 
             h = this.plot_crvs();
@@ -545,6 +613,7 @@ classdef Ro948Kit < handle & mlsystem.IHandle
             saveFigure2(h3, fullfile( ...
                 this.chemdir, this.fileprefix + "_metab_corr_ptac"))
         end
+
         function h = plot_crvs(this)
             h = figure;
             this.crv_.plotAll()
@@ -607,6 +676,7 @@ classdef Ro948Kit < handle & mlsystem.IHandle
             this.N_average_minimal = opts.N_average_minimal;
             this.Delta = opts.Delta;
         end
+
         function initialize(this)
             this.T_frac_intact = readtable(fullfile(this.chemdir, this.fileprefix + "_frac_intact.csv"));
             this.T_frac_intact.Properties.VariableNames = ["Time", "FractionIntact"];
@@ -625,10 +695,12 @@ classdef Ro948Kit < handle & mlsystem.IHandle
                     error("mlwong:ValueError", "%s: this.ptac_units->%s", stackstr(), this.ptac_units)
             end
         end
+
         function idx = index_toi_minus_30sec(this)
             dur = duration(this.toi - this.datetime_crv_init(this.crv)) - seconds(30);
             idx = round(seconds(dur) + 1);
         end
+
         function idx = index_toi_plus_time_cliff_min(this)
             dur = duration(this.toi - this.datetime_crv_init(this.crv)) + seconds(this.timeCliff);
             idx = round(seconds(dur) + 1);
@@ -640,6 +712,7 @@ classdef Ro948Kit < handle & mlsystem.IHandle
             dt = crv.timetable().Time(1);
             dt.TimeZone = "local";
         end
+
         function hct = estimated_hct(opts)
             arguments
                 opts.sex char = ''

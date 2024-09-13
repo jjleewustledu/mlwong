@@ -19,10 +19,10 @@ classdef TZ3108 < handle & mlsystem.IHandle
         home = "/Users/jjlee/Documents/PapersMine/PapersInProgress/Will_Tu/minus-TZ3108";
         bids_home = "/Users/jjlee/Singularity/TZ3108/derivatives"
         LABELS = [ ...
-            "V_T", "BP_{ND}", "K_1", "k_2", "k_3", "k_4", "sigma", "log(Z)"];
+            "V_T", "BP_{ND}", "K_1", "k_2", "k_3", "k_4", "\sigma", "log Z"];
         LABELS_2MODELS = [ ...
-            "H: log_{10}(V_T)", "H: log_{10}(BP_{ND})", "H: log_{10}(BP_P)", "H: log_{10}(K_1)", "H: log_{10}(k_2)", "H: log_{10}(k_3)", "H: log_{10}(k_4)", "H: sigma", "H: log(Z)", ...
-            "I: log_{10}(V_T)", "I: log_{10}(BP_{ND})", "I: log_{10}(BP_P)", "I: log_{10}(K_1)", "I: log_{10}(k_2)", "I: log_{10}(k_3)", "I: log_{10}(k_4)", "I: sigma", "I: log(Z)"];
+            "H: log_{10} V_T", "H: log_{10} BP_{ND}", "H: log_{10} BP_P", "H: log_{10} K_1", "H: log_{10} k_2", "H: log_{10} k_3", "H: log_{10} k_4", "H: \sigma", "H: log Z", ...
+            "I: log_{10} V_T", "I: log_{10} BP_{ND}", "I: log_{10} BP_P", "I: log_{10} K_1", "I: log_{10} k_2", "I: log_{10} k_3", "I: log_{10} k_4", "I: \sigma", "I: log Z"];
     end
 
     properties (Dependent)
@@ -267,6 +267,19 @@ classdef TZ3108 < handle & mlsystem.IHandle
             set(h, position=[100,100,1000,700]) % position and size of window on display
         end
 
+        function lbls = labels_sa(this, opts)
+            arguments
+                this mlwong.TZ3108 %#ok<*INUSA>
+                opts.M {mustBeInRange} = 4
+            end
+
+            lbls = ["V_T", "\alpha_0"];
+            for m = 1:opts.M
+                lbls = [lbls, "\alpha_" + m, "\beta_" + m]; %#ok<*AGROW>
+            end
+            lbls = [lbls, "\sigma", "log Z"];
+        end
+
         function [htiled,h] = plot_age_dependence(this, fns, opts)
             arguments
                 this mlwong.TZ3108
@@ -278,11 +291,11 @@ classdef TZ3108 < handle & mlsystem.IHandle
             p_bases = cell(1, length(fns));
             t_bases = cell(1, length(fns));
             suv_bases = cell(1, length(fns));
-            for fidx = 1:length(fns)
-                p_bases{fidx} = mlpmod.Pmod(filename=fns{fidx});
-                t_bases{fidx} = p_bases{fidx}.tacs;
-                suv_base_ = table2array(t_bases{fidx}(:, 4:end));
-                suv_bases{fidx} = suv_base_ * p_bases{fidx}.weight / p_bases{fidx}.dose / 37;
+            for lidx = 1:length(fns)
+                p_bases{lidx} = mlpmod.Pmod(filename=fns{lidx});
+                t_bases{lidx} = p_bases{lidx}.tacs;
+                suv_base_ = table2array(t_bases{lidx}(:, 4:end));
+                suv_bases{lidx} = suv_base_ * p_bases{lidx}.weight / p_bases{lidx}.dose / 37;
             end
 
             % remove blocking
@@ -294,7 +307,7 @@ classdef TZ3108 < handle & mlsystem.IHandle
             % sort by age
             ages = cellfun(@(x) x.age_acquisition, p_bases);  % numeric
             [sorted_ages, sorting_idx] = sort(ages);
-            sorted_legend = sorted_ages + " y";
+            sorted_legend = round(sorted_ages, 2) + " y";
             p_bases = p_bases(sorting_idx);
             t_bases = t_bases(sorting_idx);
             suv_bases = suv_bases(sorting_idx);
@@ -339,19 +352,19 @@ classdef TZ3108 < handle & mlsystem.IHandle
             r = 1;
 
             legend_ = sorted_legend;
-            for fidx = 1:length(fns)
+            for lidx = 1:length(legend_)
                 try
-                    suv_base = suv_bases{fidx};
+                    suv_base = suv_bases{lidx};
                     if any(isnan(suv_base(:, r)), "all")
-                        legend_(fidx) = [];
+                        legend_(lidx) = [];
                         continue
                     end
-                    suv_timesMid = t_bases{fidx}{:, 2} / 60;  % min
+                    suv_timesMid = t_bases{lidx}{:, 2} / 60;  % min
                     interp_base = interp1(suv_timesMid, suv_base(:, r), times, "spline");
                     interp_base(interp_base < 0 ) = 0;
 
                     hold("on")
-                    plot(times, interp_base, LineStyle="-", LineWidth=opts.lwidth, Color=cmap(fidx, :));
+                    plot(times, interp_base, LineStyle="-", LineWidth=opts.lwidth, Color=cmap(lidx, :));
                     hold("off")
                 catch ME
                     handwarning(ME)
@@ -373,19 +386,19 @@ classdef TZ3108 < handle & mlsystem.IHandle
             r = 21;
 
             legend_ = sorted_legend;
-            for fidx = 1:length(fns)
+            for lidx = 1:length(fns)
                 try
-                    suv_base = suv_bases{fidx};
+                    suv_base = suv_bases{lidx};
                     if any(isnan(suv_base(:, r)), "all")
-                        legend_(fidx) = [];
+                        legend_(lidx) = [];
                         continue
                     end
-                    suv_timesMid = t_bases{fidx}{:, 2} / 60;  % min
+                    suv_timesMid = t_bases{lidx}{:, 2} / 60;  % min
                     interp_base = interp1(suv_timesMid, suv_base(:, r), times, "spline");
                     interp_base(interp_base < 0 ) = 0;
 
                     hold("on")
-                    plot(times, interp_base, LineStyle="-", LineWidth=opts.lwidth, Color=cmap(fidx, :));
+                    plot(times, interp_base, LineStyle="-", LineWidth=opts.lwidth, Color=cmap(lidx, :));
                     hold("off")
                 catch ME
                     handwarning(ME)
@@ -409,19 +422,19 @@ classdef TZ3108 < handle & mlsystem.IHandle
                 nexttile
 
                 legend_ = sorted_legend;
-                for fidx = 1:length(fns)
+                for lidx = 1:length(fns)
                     try
-                        suv_base = suv_bases{fidx};
+                        suv_base = suv_bases{lidx};
                         if any(isnan(suv_base(:, r)), "all")
-                            legend_(fidx) = [];
+                            legend_(lidx) = [];
                             continue
                         end
-                        suv_timesMid = t_bases{fidx}{:, 2} / 60;  % min
+                        suv_timesMid = t_bases{lidx}{:, 2} / 60;  % min
                         interp_base = interp1(suv_timesMid, suv_base(:, r), times, "spline");
                         interp_base(interp_base < 0 ) = 0;
 
                         hold("on")
-                        plot(times, interp_base, LineStyle="-", LineWidth=opts.lwidth, Color=cmap(fidx, :));
+                        plot(times, interp_base, LineStyle="-", LineWidth=opts.lwidth, Color=cmap(lidx, :));
                         hold("off")
                     catch ME
                         handwarning(ME)
@@ -588,7 +601,11 @@ classdef TZ3108 < handle & mlsystem.IHandle
             saveFigure2(htiled, "regions_including_blocking")
         end
 
-        function plot_spider_blocking(this)
+        function plot_spider_blocking(this, opts)
+            arguments
+                this mlwong.TZ3108
+                opts.tableh function_handle = @this.table_Huang
+            end
 
             cd("/Volumes/T7 Shield/TZ3108/derivatives");
             
@@ -599,7 +616,8 @@ classdef TZ3108 < handle & mlsystem.IHandle
             mglobbed = mglobbed([2, 1, 3]);
 
             legend = ["baseline", "Yun122", "SA4503"];
-            [t,tcm] = this.table_Ichise(sesdir=mglobbed);
+            [t,tcm] = opts.tableh(sesdir=mglobbed);
+            % [t,tcm] = this.table_Ichise(sesdir=mglobbed);
             
             s = mlwong.TZ3108.create_spider_chart( ...
                 t, tcm.regions(1), ...
@@ -609,7 +627,11 @@ classdef TZ3108 < handle & mlsystem.IHandle
                 legend_visible=true, ...
                 color=cividis(3), ...
                 fill_option=true);
-            title(tcm.regions(1), FontSize=14)
+            % title(tcm.regions(1), FontSize=14)
+            pwd0 = pushd("sub-bud");
+            saveFigure2(gcf, "huang_blocking_whole_brain")
+            popd(pwd0);
+            close(gcf);
                         
             ss = mlwong.TZ3108.create_spider_charts( ...
                 t, tcm.regions, ...
@@ -617,15 +639,20 @@ classdef TZ3108 < handle & mlsystem.IHandle
                 color=cividis(3), ...
                 fill_option=true, ...                
                 fill_transparency=0.25);
+            saveFigures(pwd, prefix="huang_blocking")
         end
 
-        function plot_spider_age_dependence(this)
+        function plot_spider_age_dependence(this, opts)
+            arguments
+                this mlwong.TZ3108
+                opts.tableh function_handle = @this.table_Huang
+            end
 
             cd("/Volumes/T7 Shield/TZ3108/derivatives");
 
             [sess,legend] = this.ses_sorted_by_age();
             cmap = viridis(length(sess));
-            [t,tcm] = this.table_Ichise(sesdir=sess);
+            [t,tcm] = opts.tableh(sesdir=sess);
 
             s = mlwong.TZ3108.create_spider_chart( ...
                 t, tcm.regions(1), ...
@@ -637,7 +664,11 @@ classdef TZ3108 < handle & mlsystem.IHandle
                 fill_option=false, ...               
                 fill_transparency=0.05, ...
                 line_width=1.5);
-            title(tcm.regions(1), FontSize=14)
+            % title(tcm.regions(1), FontSize=14)
+            pwd0 = pushd("sub-bud");
+            saveFigure2(gcf, "huang_aging_whole_brain")
+            popd(pwd0);
+            close(gcf);
                         
             ss = mlwong.TZ3108.create_spider_charts( ...
                 t, tcm.regions, ...
@@ -646,9 +677,14 @@ classdef TZ3108 < handle & mlsystem.IHandle
                 fill_option=false, ...
                 fill_transparency=0.05, ...
                 line_width=1.5);
+            saveFigures(pwd, prefix="huang_aging")
         end
 
-        function plot_spider_blocking_2model(this)
+        function plot_spider_blocking_2models(this, opts)
+            arguments
+                this mlwong.TZ3108
+                opts.tableh function_handle = @this.table_Huang_Ichise
+            end
 
             cd("/Volumes/T7 Shield/TZ3108/derivatives");
             
@@ -658,7 +694,7 @@ classdef TZ3108 < handle & mlsystem.IHandle
             mglobbed = mglob(sesdirs);
             mglobbed = mglobbed([2, 1, 3]);
 
-            [t,tcm] = this.table_Huang_Ichise(sesdir=mglobbed);
+            [t,tcm] = opts.tableh(sesdir=mglobbed);
             
             s = mlwong.TZ3108.create_spider_chart_2models( ...
                 t, tcm.regions(1), ...
@@ -676,13 +712,17 @@ classdef TZ3108 < handle & mlsystem.IHandle
                 fill_option=true);
         end
 
-        function plot_spider_age_dependence_2models(this)
+        function plot_spider_age_dependence_2models(this, opts)
+            arguments
+                this mlwong.TZ3108
+                opts.tableh function_handle = @this.table_Huang_Ichise
+            end
 
             cd("/Volumes/T7 Shield/TZ3108/derivatives");
 
             [sess,legend] = this.ses_sorted_by_age();
             cmap = viridis(length(sess));
-            [t,tcm] = this.table_Huang_Ichise(sesdir=sess);
+            [t,tcm] = opts.tableh(sesdir=sess);
 
             s = mlwong.TZ3108.create_spider_chart_2models( ...
                 t, tcm.regions(1), ...
@@ -745,18 +785,19 @@ classdef TZ3108 < handle & mlsystem.IHandle
             end
 
             % Huang ------------------------------
-            t_H = table();
+            t = table();
             for ses = asrow(opts.sesdirs)
                 try
-                    tcm = mldynesty.TCModel.load(ses, model="Huang1980Model");
-                    t_H = [t_H; tcm.table()]; %#ok<AGROW>
+                    tcm = mldynesty.TissueModel.load(ses, model="Huang1980Model");
+                    t = [t; tcm.table()]; %#ok<AGROW>
                 catch ME
                     handwarning(ME)
                 end
             end
             % ------------------------------------
 
-            % t{:,5:8} = log10(t{:,5:8});  % k_i -> log10(k_i)
+            % disp(t)
+            t{:,2:3} = log10(t{:,2:3});  % V_T -> log10(V_T) BP_ND -> log10(BP_ND)
         end
 
         function [t,tcm] = table_Huang_Ichise(this, opts)
@@ -772,7 +813,7 @@ classdef TZ3108 < handle & mlsystem.IHandle
             t_H = table();
             for ses = asrow(opts.sesdirs)
                 try
-                    tcm = mldynesty.TCModel.load(ses, model="Huang1980Model");
+                    tcm = mldynesty.TissueModel.load(ses, model="Huang1980Model");
                     t_H = [t_H; tcm.table_9param()]; %#ok<AGROW>
                 catch ME
                     handwarning(ME)
@@ -785,7 +826,7 @@ classdef TZ3108 < handle & mlsystem.IHandle
             t_I = table();
             for ses = asrow(opts.sesdirs)
                 try
-                    tcm = mldynesty.TCModel.load(ses, model="Ichise2002VascModel");
+                    tcm = mldynesty.TissueModel.load(ses, model="Ichise2002VascModel");
                     t_I = [t_I; tcm.table_9param()]; %#ok<AGROW>
                 catch ME
                     handwarning(ME)
@@ -813,7 +854,7 @@ classdef TZ3108 < handle & mlsystem.IHandle
             t = table();
             for ses = asrow(opts.sesdirs)
                 try
-                    tcm = mldynesty.TCModel.load(ses, model="Ichise2002VascModel");
+                    tcm = mldynesty.TissueModel.load(ses, model="Ichise2002VascModel");
                     t = [t; tcm.table()]; %#ok<AGROW>
                 catch ME
                     handwarning(ME)
@@ -918,6 +959,8 @@ classdef TZ3108 < handle & mlsystem.IHandle
         end
 
         function s = create_spider_chart(df, region, opts)
+            %% generates whole brain chart only
+
             arguments
                 df table
                 region {mustBeTextScalar} = "whole brain"
@@ -949,7 +992,7 @@ classdef TZ3108 < handle & mlsystem.IHandle
             s = mlplot.SpiderChart(a, LineWidth=opts.line_width, RhoAxesVisible=false);
 
             precision = [ ...
-                0, 0, 2, 2, 2, 2, 2, 0];
+                1, 1, 3, 3, 3, 3, 2, 0];
             s.AxesLabels = opts.axes_labels;
             s.AxesPrecision = precision(opts.reordering);
             s.AxesLimits = opts.axes_limits(:, opts.reordering);
@@ -963,6 +1006,8 @@ classdef TZ3108 < handle & mlsystem.IHandle
         end
 
         function ss = create_spider_charts(df, regions, opts)
+            %% plots Huang and Ichise symmetrically on left and right of chart
+
             arguments
                 df table
                 regions {mustBeText}
@@ -995,6 +1040,9 @@ classdef TZ3108 < handle & mlsystem.IHandle
         end
 
         function s = create_spider_chart_2models(df, region, opts)
+            %% generates whole brain chart only
+            %  plots Huang and Ichise symmetrically on left and right of chart
+            
             arguments
                 df table
                 region {mustBeTextScalar} = "whole brain"
@@ -1039,6 +1087,8 @@ classdef TZ3108 < handle & mlsystem.IHandle
         end
 
         function ss = create_spider_charts_2models(df, regions, opts)
+            %% plots Huang and Ichise symmetrically on left and right of chart
+
             arguments
                 df table
                 regions {mustBeText}
