@@ -129,7 +129,7 @@ classdef Ro948Kit < handle & mlsystem.IHandle
             end
 
             Time = this.T_total_ptac.Sec;
-            PF = makima(this.T_parent_frac.Sec, this.T_parent_frac.PF, Time);
+            PF = interp1(this.T_parent_frac.Sec, this.T_parent_frac.PF, Time, 'linear', 'extrap');
             mc_pTAC = this.T_total_ptac.pTAC .* PF/100;
 
             DateTime = this.toi + seconds(Time);
@@ -287,7 +287,7 @@ classdef Ro948Kit < handle & mlsystem.IHandle
             % deconvBayes
             M_ = this.crv.timetable().Coincidence(idx0:idxF)*this.inveff; % col
             cath = mlswisstrace.Catheter_DT20190930( ...
-                model_kind='2bolus', ...
+                model_kind='3bolus', ...
                 Measurement=M_, hct=hct, tracer=this.tracer); 
             M = zeros(size(this.crv.timetable().Coincidence)); % col
             % t0 reflects rigid extension + Luer valve + cath in Twilite cradle
@@ -356,6 +356,21 @@ classdef Ro948Kit < handle & mlsystem.IHandle
             Time = [ascol(times__(idx0:idxF)); this.T_minimal.Time];
             wbKBq_mL = [M(idx0:idxF); this.T_minimal.plasmaKBq_mL];  % N.B., using T_minimal to obtain kBq/mL
 
+            % some late times__ overlap with this.T_minimal.Time, so sort
+            [Time,sorting_order] = sort(Time);
+            wbKBq_mL = wbKBq_mL(sorting_order);
+
+            % jitter measurements nearly simultaneous in time, usually the TOI
+            taus_ = [Time(2) - Time(1); Time(2:end) - Time(1:end-1)];
+            assert(all(taus_ >= 0))
+            simultaneous = taus_ < eps;
+            Nsimul = sum(simultaneous);
+            jitter = double(simultaneous);
+            numer = mean(ascol(1:Nsimul) + rand(Nsimul, 1));
+            jitter(simultaneous) = numer/(Nsimul + 1);
+            Time = Time + jitter;
+
+            % build table
             T = table(Time, wbKBq_mL);            
             [~,fp] = myfileparts(this.crv.filename);
             writetable(T, fullfile(this.twildir, fp+"_build_dispersed.csv"));
@@ -436,21 +451,17 @@ classdef Ro948Kit < handle & mlsystem.IHandle
             if max(T.FractionIntact) > 1
                 T.FractionIntact = 0.01*T.FractionIntact;
             end
+            hill = mlwong.Hill(T, dt=1, d_min=this.Hill_d_min, visualize_anneal=false);
             if this.do_Hill
-                hill = mlwong.Hill(T, dt=1, d_min=this.Hill_d_min, visualize_anneal=false);
                 T1 = hill.solve();
                 h = plot(hill);
                 disp(hill)
                 disp(hill.results.ks)
                 disp(hill.results.loss)
             else
-                timeInterp = 0:1:T.Time(end)-1;
-                FractionIntact = makima(T.Time, T.FractionIntact, timeInterp);
-                T1 = table(ascol(timeInterp), ascol(FractionIntact), variableNames=["Time", "FractionIntact"]);
-                h = plot(T1, "Time", "FractionIntact");
-                xlabel("Time");
-                ylabel("Fraction Intact");
-                title("Fraction Intact by Makima (replacing Hill)");
+                T1 = hill.interp1();
+                h = plot(hill);
+                disp(hill)
             end
             saveFigure2(h, this.fileprefix+"_Hill");
             writetable(T1, this.fileprefix+"_Hill.csv")
@@ -552,6 +563,37 @@ classdef Ro948Kit < handle & mlsystem.IHandle
             writetable(this.T_parent_frac, ...
                 fullfile(this.chemdir, this.fileprefix + "_parent_frac.csv"));
             
+        end
+
+        function ic = csv2nii(this, csv)
+            arguments
+                this mlwong.Ro948Kit
+                csv {mustBeFile} = "" 
+            end
+
+            template = mlfourd.ImagingContext2( ...
+                fullfile(getenv("HOME"), "MATLAB-Drive", "mlwong", "data", ...
+                "sub-108293_ses-20210421155709_trc-fdg_proc-TwiliteKit-do-make-input-func-nomodel_inputfunc.nii.gz"));
+
+            T = readtable(csv);
+
+            ifc = copy(template.imagingFormat);
+            ifc.img = asrow(T.wbKBq_mL);
+            ifc.fqfp = fullfile(this.chemdir, this.fileprefix + "_inputfunc");
+            ifc.filesuffix = ".nii.gz";
+            ifc.json_metadata.Manufacturer = "Swisstrace";
+            ifc.json_metadata.ManufacturersModelName = "Twilite II";
+            ifc.json_metadata.ImageComments = stackstr();
+            ifc.json_metadata.taus = [T.Time(2) - T.Time(1); T.Time(2:end) - T.Time(1:end-1)];
+            ifc.json_metadata.times = T.Time;
+            ifc.json_metadata.timesMid = T.Time + ifc.json_metadata.taus(1)/2;
+            ifc.json_metadata.timeUnit = "second";
+            ifc.json_metadata.datetime0 = this.toi;
+            ifc.json_metadata.datetimeForDecayCorrection = this.toi;
+            ifc.json_metadata.baselineActivityDensity = 0;
+            ifc.json_metadata.(stackstr()).invEfficiency = nan;
+            ic = mlfourd.ImagingContext2(ifc);
+            %ic.addJsonMetadata(opts);
         end
 
         function M1 = disperse(this, M)

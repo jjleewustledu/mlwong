@@ -7,6 +7,7 @@ classdef Hill < handle
     
     properties
         dt
+        interp_method
         T
         Tout
         visualize_anneal
@@ -45,6 +46,7 @@ classdef Hill < handle
                 T table % ["Time", "FractionIntact"]
                 opts.dt double = 1 % sampling interval (sec)
                 opts.d_min double = 0.9
+                opts.interp_method {mustBeTextScalar} = "makima"
                 opts.visualize_anneal logical = false;
             end
             T = T(~isnan(T.FractionIntact), :);
@@ -63,6 +65,8 @@ classdef Hill < handle
             this.ks0 = [0.03, 1.5, 2*seps, 0.975, 60]; 
             this.ks_upper = [0.06447, 4, inf, 1, e_max];
             this.ks_names = {'a' 'b' 'c' 'd' 'e'};
+            this.interp_method = opts.interp_method;
+            this.solved_ = false;
         end
         function h = plot(this, varargin)
             T_pcnt_ = this.T;
@@ -77,9 +81,29 @@ classdef Hill < handle
             hold("off")
             xlabel("time (s)", FontSize=14, FontWeight="bold")
             ylabel("fraction of parent tracer (%)", FontSize=14, FontWeight="bold")
-            title("Extended Hill Function", FontSize=18, FontWeight="bold")
-            annotation('textbox', [.45 .35 .8 .5], 'String', sprintfModel(this), 'FitBoxToText', 'on', 'FontSize', 14, 'LineStyle', 'none')            
-            legend(["HPLC measurements", "Hill function fit"])
+            if this.solved_
+                title("Extended Hill Function", FontSize=18, FontWeight="bold")
+                annotation('textbox', [.45 .35 .8 .5], 'String', sprintfModel(this), 'FitBoxToText', 'on', 'FontSize', 14, 'LineStyle', 'none')
+                legend(["HPLC measurements", "Hill function fit"])
+            else
+                title("Interpolation " + this.interp_method, FontSize=18, FontWeight="bold")
+                legend(["HPLC measurements", "interp1"])
+            end
+        end
+        function Tout1 = interp1(this)
+            T_ = this.T;
+            Time = ascol(this.timeInterpolants);
+            FractionIntact = interp1(T_.Time, T_.FractionIntact, Time, this.interp_method);
+            this.Tout = table(Time, FractionIntact);
+            Tout1 = this.Tout;
+
+            FractionIntact = makima(T_.Time, T_.FractionIntact, Time);
+            T1 = table(ascol(Time), ascol(FractionIntact), variableNames=["Time", "FractionIntact"]);
+            h = figure;
+            plot(T1, "Time", "FractionIntact");
+            xlabel("Time");
+            ylabel("Fraction Intact");
+            title("Fraction Intact by Makima (replacing Hill)");
         end
         function Tout1 = solve(this)
             %% options
@@ -123,6 +147,7 @@ classdef Hill < handle
             FractionIntact = ascol(mlwong.Hill.solution(ks_, Time));
             this.Tout = table(Time, FractionIntact);
             Tout1 = this.Tout;
+            this.solved_ = true;
         end
         function s = sprintfModel(this)
             s = sprintf('extended Hill function:\n');
@@ -170,6 +195,7 @@ classdef Hill < handle
         ks_names
         ks_upper
         product_
+        solved_
         timeInterpolants_
     end
 
