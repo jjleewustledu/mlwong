@@ -412,6 +412,39 @@ classdef Eisai_VAT < handle
             end
         end
 
+        function write_summary_xlsx(this)
+            mdl0 = ["twotcm", "ma2", "logan", "mrtm2", "logan_ref", "srtm2", "mrtm2_cbm", "logan_ref_cbm", "srtm2_cbm"];
+            mdl1 = ["2TCM", "MA2", "Logan", "MRTM2 (pons)", "Logan Ref. Tiss. (pons)", "SRTM2 (pons)", "MRTM2 (cbm)", "Logan Ref. Tiss. (cbm)", "SRTM2 (cbm)"];
+            mdl_map = containers.Map(mdl0, mdl1);
+            measure = ["Vt", "Vt", "Vt", "BPnd", "BPnd", "BPnd", "BPnd", "BPnd", "BPnd"];
+            meas_map = containers.Map(mdl0, measure);
+            twotcm_duration = [repmat(30, [46, 1]); repmat(60, [46, 1]); repmat(90, [46, 1]); repmat(120, [46, 1])];
+
+            S = this.data_struct;
+
+            for imdl0 = 1:length(mdl0)
+                mdl = mdl0(imdl0);
+                meas = measure(imdl0);
+
+                Region = S.EVA109.PET1.(mdl).Region;
+                T = table(Region);
+                if strcmp(mdl, "twotcm")
+                    T = addvars(T, twotcm_duration, NewVariableNames="Scan_Duration");
+                end
+                T = this.clean_table(T);
+
+                for eva = ["EVA109", "EVA112", "EVA114", "EVA115", "EVA118"]
+                    for pet = ["PET1", "PET2"]
+                        new_col = S.(eva).(pet).(mdl).(meas);
+                        scan_region = S.(eva).(pet).(mdl).Region;
+                        new_col = this.clean_matrix(new_col, scan_region);
+                        T = addvars(T, new_col, NewVariableNames=sprintf("%s_%s_%s", eva, pet, meas));
+                    end
+                end
+
+                writetable(T, "Eisai_VAT_complete.xlsx", Sheet=mdl1(imdl0));
+            end
+        end
     end
 
     methods (Static)
@@ -716,7 +749,7 @@ classdef Eisai_VAT < handle
             end
         end
         function T = clean_table(this, T)
-            T = T(~contains(T.Regions, this.EXCLUDED_REGIONS), :);
+            T = T(~contains(T.Region, this.EXCLUDED_REGIONS), :);
             for k = this.regions_to_rename
                 T.Region = strrep(T.Region, k, this.region_replacement(k));
             end

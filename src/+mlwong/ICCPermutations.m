@@ -76,7 +76,7 @@ classdef ICCPermutations < handle & mlwong.ICC
 
             %% Initialize storage
             n_subjects = 5;
-            n_permutations = 100; % For permutation testing, prefer 10000
+            n_permutations = 10000; % For permutation testing, prefer 10000
 
             % Prepare all method combinations
             all_methods = {};
