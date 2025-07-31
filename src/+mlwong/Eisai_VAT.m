@@ -6,8 +6,8 @@ classdef Eisai_VAT < handle
     %  Developed on Matlab 24.2.0.2923080 (R2024b) Update 6 for MACA64.  Copyright 2025 John J. Lee.
     
     properties (Constant)
-        DERIVATIVES_HOME = "/Volumes/T7 Shield/Eisai/derivatives"
-        EISAI_HOME = "/Users/jjlee/Library/CloudStorage/Box-Box/CNAMI_Lab/Arterial Input Data/Eisai VAT"
+        DERIVATIVES_HOME = "/Users/jjlee/Library/CloudStorage/Box-Box/Eisai_JJL/derivatives"
+        EISAI_HOME = "/Users/jjlee/Library/CloudStorage/Box-Box/Eisai_JJL"
         EVA_ids = [105, 109, 112, 114, 115, 118];
         EVA_dates = { ...
              datetime(2025,1,31), ...
@@ -599,6 +599,47 @@ classdef Eisai_VAT < handle
             myMap = containers.Map(fieldNames, fieldValues);
         end
     
+        function T_suv = suv(T_kBq, subid, sesid)
+            arguments
+                T_kBq table
+                subid {mustBeTextScalar}  % "EVA109"
+                sesid {mustBeNonempty}  % 1 | "baseline" | "baseline_tacs"
+            end
+            if istext(sesid)
+                if contains(sesid, "baseline")
+                    sesid = 1;
+                elseif contains(sesid, "retest")
+                    sesid = 2;
+                else
+                    error("mlwong:ValueError", stackstr());
+                end
+            end
+
+            DHOME = mlwong.Eisai_VAT.DERIVATIVES_HOME;
+
+            % dosing data
+            T_dosing = readtable(fullfile(DHOME, 'dosing.csv'));
+            T_dosing.Subject = strrep(convertCharsToStrings(T_dosing.Subject), "_", "");
+            T_dosing = addvars(T_dosing, ...
+                T_dosing.Weight_lbs_ / 2.2, After="Weight_lbs_", NewVariableNames="Weight_kg_");
+            T_dosing = T_dosing(strcmp(subid, T_dosing.Subject), :);
+
+            % timing data
+            T_timings = readtable(fullfile(DHOME, "frame_timings.xlsx"));
+
+            % assembly
+            T_kBq(:, 1) = [];
+            T_suv = array2table(suv_of_col(table2array(T_kBq)), VariableNames=T_kBq.Properties.VariableNames);
+            T_suv.Properties.VariableNames{1} = 'MidFrameTime_sec_';
+            T_suv.MidFrameTime_sec_ = T_timings.mid_frameTime_s_;
+
+            function val1 = suv_of_col(val0)
+                wt = 1e3 * T_dosing{sesid, "Weight_kg_"};  % g
+                dose = T_dosing{sesid, "InjectedDose_bq_"} / 1e3;  % kBq
+                val1 = val0 * wt / dose;
+            end
+        end
+
         function modified_table = table_for_anat_regions(input_table)
             % Modifies regions in place
 
