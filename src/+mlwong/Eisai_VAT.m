@@ -600,6 +600,20 @@ classdef Eisai_VAT < handle
         end
     
         function T_suv = suv(T_kBq, subid, sesid)
+            %% create SUVs from Noah's TACs
+            %
+            % e.g.:
+            % cd("NoahGoldman")
+            % subs = "EVA" + [109, 112, 114, 115, 118];
+            % sess = ["baseline_tacs", "retest_tacs"];
+            % for s = subs
+            %     for e = sess
+            %         T = readtable(fullfile("TACs", "sub-" + s, sprintf("sub-%s_ses-%s.csv", s, e)));
+            %         T1 = mlwong.Eisai_VAT.suv(T, s, e);
+            %         writetable(T1, fullfile("SUVs", "sub-" + s, sprintf("sub-%s_ses-%s.csv", s, strrep(e, "tacs", "suvs"))));
+            %     end
+            % end
+
             arguments
                 T_kBq table
                 subid {mustBeTextScalar}  % "EVA109"
