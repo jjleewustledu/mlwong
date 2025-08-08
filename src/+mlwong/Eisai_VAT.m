@@ -494,6 +494,67 @@ classdef Eisai_VAT < handle
             end
         end
 
+        function plot_table(data_table, atitle)
+            arguments
+                data_table table
+                atitle {mustBeTextScalar} = "EVA* baseline|retest"
+            end
+
+            % Table is named 'data_table'
+
+            figure;
+            hold on;
+
+            % Get the time vector from the first column
+            variable_names = data_table.Properties.VariableNames;
+            time_vector = data_table.(variable_names{1}); % First column contains time
+            n_samples = height(data_table);
+
+            % Get data variable names (excluding the first column which is time)
+            data_variable_names = variable_names(2:end);
+            n_series = length(data_variable_names);
+
+            % Choose a uniform color for background series (e.g., gray-blue)
+            background_color = [0.5, 0.5, 0.7]; % RGB values
+            transparency = 0.3; % Adjust transparency (0 = fully transparent, 1 = opaque)
+
+            % Plot all series except WMref with transparency
+            for i = 1:n_series
+                var_name = data_variable_names{i};
+
+                % Skip WMref for now - we'll plot it last to ensure it's on top
+                if ~strcmp(var_name, 'WMRef')
+                    plot(time_vector, data_table.(var_name), ...
+                        'Color', [background_color, transparency], ...
+                        'LineWidth', 1, ...
+                        'HandleVisibility', 'off');
+                end
+            end
+
+            % Plot WMref series with magenta color and full opacity
+            if ismember('WMRef', data_variable_names)
+                h_wmref = plot(time_vector, data_table.WMRef, ...
+                    'Color', 'm', ...  % Magenta
+                    'LineWidth', 2, ...  % Thicker line for emphasis
+                    'DisplayName', 'WMRef');
+
+                % Explicitly set the legend
+                legend(h_wmref, 'WMref', 'Location', 'best');
+            end
+
+            % Customize the plot
+            xlabel('Time (s)');
+            ylabel('SUV (kB cc^{-1} g kB^{-1}');
+            title(atitle, Interpreter="none");
+            fontsize(scale=1.6)
+            grid on;
+            hold off;
+
+            % Optional: Adjust figure properties for better visualization
+            set(gca, 'FontSize', 12);
+            set(gcf, 'Position', [100, 100, 800, 600]); % [x, y, width, height]
+        end
+
         function new_S = struct_for_anat_regions(old_S)
 
             import mlwong.Eisai_VAT.table_for_anat_regions
